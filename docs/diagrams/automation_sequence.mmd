@@ -1,0 +1,14 @@
+sequenceDiagram
+  participant Cron as Cron/Scheduler
+  participant Provider as Provider Service
+  participant DB as Database
+  participant Diff as Incremental Filter
+  participant Mail as Mail Service
+  participant User as User Inbox
+
+  Cron->>Provider: 1. 定时拉取关键词A/B
+  Provider->>DB: 2. upsert 新帖子/视频
+  DB-->>Diff: 3. 查找 first_seen_at > 上次任务
+  Diff->>Mail: 4. 生成报表内容
+  Mail->>User: 5. 发送 HTML 邮件
+  User-->>Cron: 6. 下一次任务继续循环

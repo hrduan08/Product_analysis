@@ -1,0 +1,29 @@
+sequenceDiagram
+  participant User as User
+  participant Frontend as SearchConfigPage
+  participant Backend as /api/app/search-config
+  participant DB as user_search_configs
+  participant Cron as Scheduler
+  participant Provider as YouTube Provider
+  participant Mail as Mail Service
+  participant Notify as notify_jobs
+
+  User->>Frontend: 打开配置页
+  Frontend->>Backend: GET 配置
+  Backend->>DB: 查询 user_search_configs
+  DB-->>Backend: 返回默认或历史配置
+  Backend-->>Frontend: 返回 JSON
+  Frontend-->>User: 展示表单
+  User->>Frontend: 编辑平台/关键词/时间/邮箱
+  Frontend->>Backend: PATCH 配置
+  Backend->>Backend: zod 校验 + 过滤平台
+  Backend->>DB: upsert user_search_configs
+  Backend-->>Frontend: 返回保存后的配置
+  Frontend-->>User: 提示“配置已保存”
+  Cron->>DB: 每分钟读取 next_run_at <= now
+  DB-->>Cron: 返回待执行的配置
+  Cron->>Provider: 调用搜索 API
+  Provider->>DB: upsert feedback_items
+  Cron->>Mail: buildMailContent + sendMail
+  Mail-->>User: 发送邮件
+  Cron->>Notify: recordNotifyJob(status=success/failed)

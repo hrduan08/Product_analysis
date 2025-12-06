@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Product Insight · 注册</title>
+    <link rel="stylesheet" href="ui-prototype.css" />
+  </head>
+  <body class="auth-page">
+    <div class="auth-card">
+      <div class="auth-card__header">
+        <h1 class="auth-card__title">创建账号</h1>
+        <p class="auth-card__subtitle">注册后将自动开启 1 天试用</p>
+      </div>
+      <form class="auth-form">
+        <label class="auth-form__field">
+          <span>邮箱</span>
+          <input type="email" placeholder="name@example.com" required />
+        </label>
+        <label class="auth-form__field">
+          <span>密码</span>
+          <input type="password" placeholder="至少 8 位，建议包含字母与数字" required />
+        </label>
+        <label class="auth-form__field">
+          <span>确认密码</span>
+          <input type="password" placeholder="再次输入密码" required />
+        </label>
+        <label class="auth-form__field">
+          <span>昵称（选填）</span>
+          <input type="text" placeholder="用于显示的称呼" />
+        </label>
+        <label class="auth-form__checkbox">
+          <input type="checkbox" checked />
+          <span>我已阅读并同意服务条款</span>
+        </label>
+        <button type="button" class="auth-form__submit">注册并开始试用</button>
+      </form>
+      <div class="auth-form__footer">
+        <span>已经有账号？</span>
+        <a href="/login">立即登录</a>
+      </div>
+    </div>
+  </body>
+</html>

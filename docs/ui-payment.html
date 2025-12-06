@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Product Insight · 支付流程</title>
+    <link rel="stylesheet" href="ui-prototype.css" />
+  </head>
+  <body>
+    <div class="nav-bar">
+      <div class="shell nav-inner">
+        <div class="nav-left">
+          <div class="logo-mark"><span>PI</span>Product Insight</div>
+          <div class="nav-menu">
+            <a href="youtube_demo_prototype.html#features">产品功能</a>
+            <a href="youtube_demo_prototype.html#usecases">行业方案</a>
+            <a href="youtube_demo_prototype.html#resources">资源中心</a>
+            <a href="ui-membership.html">会员价格</a>
+          </div>
+        </div>
+        <div class="nav-actions">
+          <button class="btn text">EN ▾</button>
+          <button class="btn">登录</button>
+          <a class="btn primary" href="ui-register.html">免费试用</a>
+        </div>
+      </div>
+    </div>
+
+    <section class="section" id="payment">
+      <header>
+        <h2>试用后置支付流程 · 明确套餐 + 银行卡</h2>
+        <p>注册后用户会在设置流程里选择试用方案并填写信用卡，试用结束才会扣款。</p>
+      </header>
+      <div class="shell payment-grid">
+        <div class="card">
+          <h4>选择试用方案</h4>
+          <div class="cta-row" style="padding:12px 0;">
+            <button class="btn secondary" style="flex:1;">14 天基础试用</button>
+            <button class="btn" style="flex:1;">14 天进阶试用</button>
+          </div>
+          <label style="display:flex; gap:12px; align-items:flex-start;">
+            <input type="checkbox" />
+            <span>可选增强包：并发运行 + 高速抓取</span>
+          </label>
+          <h4 style="margin-top:24px;">支付方式</h4>
+          <div style="display:flex; gap:12px;">
+            <button class="btn secondary" style="flex:1;">银行卡</button>
+            <button class="btn" style="flex:1;">PayPal</button>
+          </div>
+          <div style="display:grid; gap:12px; margin-top:12px;">
+            <input placeholder="Card Number" style="padding:12px; border-radius:12px; border:1px solid var(--border);" />
+            <div style="display:flex; gap:12px;">
+              <input placeholder="MM/YY" style="flex:1; padding:12px; border-radius:12px; border:1px solid var(--border);" />
+              <input placeholder="CVV" style="flex:1; padding:12px; border-radius:12px; border:1px solid var(--border);" />
+            </div>
+          </div>
+        </div>
+        <div class="card" style="align-self:stretch;">
+          <h4>订单摘要</h4>
+          <p>14 天标准试用 · 免费</p>
+          <p>Max cloud nodes: 3</p>
+          <p>下一次扣款：2025-11-28</p>
+          <button class="btn primary" style="width:100%; margin-top:16px;">确认试用</button>
+          <div class="card" style="margin-top:18px; background:rgba(16, 185, 129, 0.12); border-color:transparent;">
+            <strong>5 天退款保障</strong>
+            <p>如果不满意，可在试用后 5 天内发起退款。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="shell footer-grid">
+        <div>
+          <div class="logo-mark"><span>PI</span>Product Insight</div>
+          <p style="color:var(--muted);">© 2025 Product Insight. All rights reserved.</p>
+          <div style="display:flex; gap:12px; font-size:24px; color:var(--muted);">
+            <span>in</span>
+            <span>tw</span>
+            <span>yt</span>
+          </div>
+        </div>
+        <div>
+          <strong>Company</strong>
+          <ul>
+            <li>About</li>
+            <li>Privacy Policy</li>
+            <li>Terms</li>
+            <li>Customer Stories</li>
+          </ul>
+        </div>
+        <div>
+          <strong>Solutions</strong>
+          <ul>
+            <li>Pricing</li>
+            <li>Download</li>
+            <li>Data Service</li>
+            <li>Web Scraping Blog</li>
+          </ul>
+        </div>
+        <div>
+          <strong>Resources</strong>
+          <ul>
+            <li>Help Center</li>
+            <li>API Docs</li>
+            <li>Whitepapers</li>
+            <li>Community</li>
+          </ul>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

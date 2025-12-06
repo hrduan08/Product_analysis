@@ -1,0 +1,15 @@
+flowchart TD
+  Frontend[前端 SearchConfigPage]\n  Backend[后端 /api/app/search-config]\n  DB[(user_search_configs)]\n  Cron[用户任务调度器]\n  Provider[YouTube Provider]\n  Mailer[邮件服务]\n  Notify[notify_jobs 表]\n
+  Frontend -- GET 配置 --> Backend
+  Backend -- 读取/返回 --> DB
+  Frontend -- 展示/编辑 --> Frontend
+  Frontend -- PATCH 更新 --> Backend
+  Backend -- upsert --> DB
+  Cron -- 每分钟扫描 --> DB
+  DB -- 到期配置 --> Cron
+  Cron -- 执行任务 --> Provider
+  Provider -- 数据写入 --> DB
+  Cron -- 增量过滤/渲染 --> Mailer
+  Mailer -- 发送邮件 --> Frontend
+  Cron -- 记录结果 --> Notify
+

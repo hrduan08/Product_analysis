@@ -1,0 +1,25 @@
+sequenceDiagram
+  participant User as 用户
+  participant UI as React 前端
+  participant API as Express API
+  participant YT as YouTube API
+  participant RD as Reddit API
+
+  User->>UI: 选择平台并输入关键词
+  UI->>UI: 校验输入，展示加载状态
+  UI->>API: GET /api/search?platform=...
+  API->>API: 校验参数 & 节流检查
+  alt 平台 = YouTube
+    API->>YT: search.list (q=keyword)
+    YT-->>API: videoId 列表
+    API->>YT: videos.list (id=...)
+    YT-->>API: 视频详情
+  else 平台 = Reddit
+    API->>API: 获取/刷新 OAuth Token
+    API->>RD: GET /search?q=keyword&after=...
+    RD-->>API: 帖子列表
+  end
+  API->>API: 统一字段 & 分页信息
+  API-->>UI: 返回平台无关的 JSON
+  UI->>UI: 更新历史、渲染卡片、Toast
+  UI-->>User: 展示结果 & 分页操作

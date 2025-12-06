@@ -1,0 +1,9 @@
+graph TD
+  A[User Browser] -->|SPA Interaction| B[React Frontend<br/>Vite + TypeScript]
+  B -->|GET /api/search?platform=&query=| C[Express API Gateway<br/>Node.js + TypeScript]
+  C -->|Dispatch YouTube| D[YouTube Provider<br/>YouTube Data API v3]
+  C -->|Dispatch Reddit| E[Reddit Provider<br/>OAuth Token + Search]
+  D -->|Video JSON| C
+  E -->|Post JSON| C
+  C -->|Unified Response| B
+  B -->|Render Cards, Toast, History| A

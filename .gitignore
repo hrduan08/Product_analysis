@@ -1,0 +1,47 @@
+# Node modules
+node_modules/
+packages/*/node_modules/
+
+# 构建产物
+dist/
+packages/*/dist/
+packages/web/build/
+
+# Vim/IDE 的缓存、编辑器配置
+.DS_Store
+*.swp
+*.log
+
+# 环境变量文件（如需保密）
+.env
+.env.*
+packages/server/.env
+packages/web/.env
+packages/web/.env.*
+packages/web/.env.local
+
+# pnpm / npm / yarn 锁文件可以保留你正在用的 pnpm-lock.yaml，忽略其它格式
+package-lock.json
+yarn.lock
+
+# TypeScript 增量缓存
+**/*.tsbuildinfo
+
+# Playwright 测试输出
+test-results/
+playwright-report/
+playwright/.cache/
+
+# 覆盖率 / 临时文件
+coverage/
+temp/
+.tmp/
+
+# OS 系统文件
+.DS_Store
+Thumbs.db
+
+# PM2/Nginx 日志（如果需要）
+*.log
+logs/
+

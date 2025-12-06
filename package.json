@@ -1,0 +1,18 @@
+{
+  "name": "youtube-feedback-demo",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Demo project for tracking YouTube feedback.",
+  "packageManager": "pnpm@10.19.0",
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "dev:server": "pnpm --filter server dev",
+    "build:web": "pnpm --filter web build",
+    "build:server": "pnpm --filter server build",
+    "test": "pnpm -r test",
+    "test:e2e": "pnpm exec playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.2"
+  }
+}

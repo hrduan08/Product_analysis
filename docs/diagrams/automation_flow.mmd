@@ -1,0 +1,8 @@
+graph TD
+  Scheduler[定时任务 Cron] -->|触发| Fetcher[跨平台 Provider]
+  Fetcher -->|写入| DB[(PostgreSQL/存储)]
+  DB --> Delta[增量过滤器]
+  Delta --> Template[邮件模板渲染]
+  Template --> Mailer[邮件服务 SendGrid/SMTP]
+  Mailer --> User[订阅用户]
+  User --> Feedback[邮件、回复、下一轮迭代]

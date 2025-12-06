@@ -1,0 +1,68 @@
+<svg width="900" height="420" viewBox="0 0 900 420" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .box { fill:#ffffff; stroke:#1f2933; stroke-width:2; rx:8; ry:8; }
+    .title { font: 600 16px 'Arial', sans-serif; fill:#111827; }
+    .label { font: 14px 'Arial', sans-serif; fill:#111827; }
+    .note { font: 12px 'Arial', sans-serif; fill:#374151; }
+    .arrow { stroke:#2563eb; stroke-width:2; marker-end:url(#arrowhead); }
+    .dashed { stroke-dasharray:6 4; }
+    .bg { fill:#eef2ff; stroke:#c7d2fe; stroke-width:1.5; rx:12; ry:12; }
+  </style>
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2563eb"/>
+    </marker>
+  </defs>
+
+  <rect x="20" y="20" width="220" height="380" class="bg"/>
+  <text x="40" y="50" class="title">Scheduler</text>
+  <rect x="40" y="70" width="180" height="80" class="box"/>
+  <text x="60" y="110" class="label">node-cron / Render</text>
+  <text x="60" y="130" class="note">触发 runWithLock()</text>
+
+  <rect x="260" y="20" width="360" height="380" class="bg"/>
+  <text x="280" y="50" class="title">Backend Services</text>
+  <rect x="300" y="80" width="140" height="70" class="box"/>
+  <text x="320" y="110" class="label">Providers</text>
+  <text x="320" y="130" class="note">YouTube / Reddit</text>
+
+  <rect x="460" y="80" width="140" height="70" class="box"/>
+  <text x="480" y="110" class="label">Feedback Store</text>
+  <text x="480" y="130" class="note">Prisma upsert</text>
+
+  <rect x="300" y="180" width="140" height="70" class="box"/>
+  <text x="320" y="210" class="label">Mail Composer</text>
+  <text x="320" y="230" class="note">HTML / Text</text>
+
+  <rect x="460" y="180" width="140" height="70" class="box"/>
+  <text x="475" y="210" class="label">Mail Sender</text>
+  <text x="475" y="230" class="note">SendGrid / SMTP</text>
+
+  <rect x="300" y="280" width="300" height="70" class="box"/>
+  <text x="320" y="310" class="label">Notify Job Service</text>
+  <text x="320" y="330" class="note">记录状态、增量、错误</text>
+
+  <rect x="640" y="20" width="240" height="380" class="bg"/>
+  <text x="660" y="50" class="title">PostgreSQL</text>
+  <rect x="660" y="80" width="200" height="90" class="box"/>
+  <text x="680" y="115" class="label">feedback_items</text>
+  <text x="680" y="140" class="note">抓取记录</text>
+
+  <rect x="660" y="190" width="200" height="90" class="box"/>
+  <text x="680" y="225" class="label">notify_jobs</text>
+  <text x="680" y="250" class="note">任务与邮件结果</text>
+
+  <rect x="660" y="300" width="200" height="70" class="box"/>
+  <text x="680" y="335" class="label">未来扩展</text>
+  <text x="680" y="355" class="note">subscriptions 等</text>
+
+  <line x1="220" y1="110" x2="300" y2="110" class="arrow"/>
+  <line x1="440" y1="115" x2="460" y2="115" class="arrow"/>
+  <line x1="600" y1="115" x2="660" y2="125" class="arrow"/>
+  <line x1="530" y1="150" x2="680" y2="210" class="arrow dashed"/>
+
+  <line x1="370" y1="250" x2="370" y2="280" class="arrow"/>
+  <line x1="530" y1="250" x2="530" y2="280" class="arrow"/>
+  <line x1="600" y1="315" x2="660" y2="235" class="arrow"/>
+  <line x1="510" y1="350" x2="660" y2="350" class="arrow"/>
+</svg>

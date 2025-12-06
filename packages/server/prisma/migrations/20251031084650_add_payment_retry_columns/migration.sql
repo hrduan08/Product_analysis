@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "payment_orders" ADD COLUMN     "last_error" TEXT,
+ADD COLUMN     "retry_count" INTEGER NOT NULL DEFAULT 0,
+ALTER COLUMN "expires_at" SET DATA TYPE TIMESTAMP(3),
+ALTER COLUMN "paid_at" SET DATA TYPE TIMESTAMP(3);

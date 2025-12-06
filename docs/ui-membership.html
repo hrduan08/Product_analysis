@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Product Insight · 会员价格</title>
+    <link rel="stylesheet" href="ui-prototype.css" />
+    <style>
+      .tag {
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: rgba(59, 130, 246, 0.12);
+        color: #2563eb;
+        font-size: 12px;
+      }
+      .plan-option {
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 12px;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+      }
+      .plan-option input {
+        width: 18px;
+        height: 18px;
+      }
+      .plan-option span {
+        font-size: 12px;
+        color: var(--primary);
+      }
+      .order-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 14px;
+        color: var(--text);
+      }
+      .order-row span {
+        color: var(--muted);
+      }
+      .faq-row {
+        border-top: 1px solid var(--border);
+        padding-top: 12px;
+      }
+      .faq-row:first-of-type {
+        border-top: none;
+        padding-top: 0;
+      }
+      .faq-row strong {
+        display: block;
+      }
+      .faq-row p {
+        margin: 4px 0 0;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="nav-bar">
+      <div class="shell nav-inner">
+        <div class="nav-left">
+          <div class="logo-mark"><span>PI</span>Product Insight</div>
+          <div class="nav-menu">
+            <a href="youtube_demo_prototype.html#features">产品功能</a>
+            <a href="youtube_demo_prototype.html#usecases">行业方案</a>
+            <a href="youtube_demo_prototype.html#resources">资源中心</a>
+            <a href="ui-membership.html">会员价格</a>
+          </div>
+        </div>
+        <div class="nav-actions">
+          <button class="btn text">EN ▾</button>
+          <button class="btn">登录</button>
+          <a class="btn primary" href="ui-register.html">免费试用</a>
+        </div>
+      </div>
+    </div>
+
+    <section class="section">
+      <header>
+        <h2>会员订阅 · 聚焦套餐选择与付款确认</h2>
+        <p>页面只保留与支付直接相关的信息，按“选择套餐 · 核对权益 · 提交支付”的顺序展示。</p>
+      </header>
+      <div class="shell" style="display:grid; gap:24px;">
+        <div style="display:grid; gap:24px; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));">
+          <div class="card" style="background:var(--blue-soft); border-color:transparent;">
+            <h4>为什么要现在升级？</h4>
+            <p>升级后立即提升监控关键词与执行时间配额，并开启飞书/邮件同时通知。无需跳转其它页面即可完成订阅。</p>
+            <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:12px;">
+              <span class="tag">7 天试用延续</span>
+              <span class="tag">2× 配额提升</span>
+              <span class="tag">飞书 + 邮件提醒</span>
+            </div>
+          </div>
+          <div class="card" style="background:var(--card);">
+            <h4>页面交互说明</h4>
+            <ul style="padding-left:18px; color:var(--muted); line-height:1.6;">
+              <li>第一步仅展示两个实际在售的套餐：月付与年付。</li>
+              <li>右侧订单实时同步套餐权益与下一次扣款时间。</li>
+              <li>提交后系统会写入 plan_id/plan_expire_at，并跳转回控制台刷新状态。</li>
+            </ul>
+          </div>
+        </div>
+
+        <div style="display:grid; gap:24px; grid-template-columns:2fr 1fr;">
+          <div class="card" style="display:flex; flex-direction:column; gap:16px;">
+            <div>
+              <h4>1. 选择套餐</h4>
+              <p style="color:var(--muted);">仅保留两个最常见的订阅选项，可随时切换，系统自动计算应付金额。</p>
+            </div>
+            <label class="plan-option">
+              <input type="radio" name="plan" checked />
+              <div>
+                <strong>月度会员</strong>
+                <p>¥99 / 月 · 2 个关键词 · 每日 2 个执行时间</p>
+              </div>
+              <span>立即生效</span>
+            </label>
+            <label class="plan-option">
+              <input type="radio" name="plan" />
+              <div>
+                <strong>年度会员</strong>
+                <p>¥999 / 年 · 10 个关键词 · 每日 5 个执行时间</p>
+              </div>
+              <span>立省 17%</span>
+            </label>
+            <div class="card" style="background:rgba(125, 211, 252, 0.25); border-color:transparent;">
+              <strong>想要更多配额？</strong>
+              <p style="color:var(--muted);">联系销售可定制团队套餐、私有化部署与 API 报表。</p>
+              <button class="btn secondary" style="margin-top:8px; width:max-content;">预约演示</button>
+            </div>
+          </div>
+
+          <div class="card" style="display:flex; flex-direction:column; gap:12px;">
+            <div>
+              <h4>2. 核对订单并支付</h4>
+              <p style="color:var(--muted);">系统将使用控制台里保存的发票信息，可在支付前再次确认。</p>
+            </div>
+            <div class="order-row">
+              <span>选择的套餐</span>
+              <strong>月度会员</strong>
+            </div>
+            <div class="order-row">
+              <span>到期时间</span>
+              <strong>2025-01-12</strong>
+            </div>
+            <div class="order-row">
+              <span>支付方式</span>
+              <strong>信用卡（可切换至微信 / 飞书 App）</strong>
+            </div>
+            <button class="btn primary" style="width:100%; margin-top:8px;">提交订单并跳转支付</button>
+            <p style="font-size:13px; color:var(--muted);">
+              支付成功后自动更新订阅状态，如需开票或退款，可在 7 天内联系支持。
+            </p>
+          </div>
+        </div>
+
+        <div class="card" style="display:grid; gap:12px;">
+          <h4>常见问题</h4>
+          <div class="faq-row">
+            <strong>试用期还在进行，可以直接升级吗？</strong>
+            <p>可以，付款后立即转入正式套餐，并保留剩余试用时长。</p>
+          </div>
+          <div class="faq-row">
+            <strong>完成支付后在哪里查看状态？</strong>
+            <p>系统会跳回控制台“我的订阅”卡片，展示新套餐与倒计时。</p>
+          </div>
+          <div class="faq-row">
+            <strong>如何取消自动续费？</strong>
+            <p>在控制台的订阅页即可关闭自动续费，当前周期到期后停止扣款。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="shell footer-grid">
+        <div>
+          <div class="logo-mark"><span>PI</span>Product Insight</div>
+          <p style="color:var(--muted);">© 2025 Product Insight. All rights reserved.</p>
+          <div style="display:flex; gap:12px; font-size:24px; color:var(--muted);">
+            <span>in</span>
+            <span>tw</span>
+            <span>yt</span>
+          </div>
+        </div>
+        <div>
+          <strong>Company</strong>
+          <ul>
+            <li>About</li>
+            <li>Privacy Policy</li>
+            <li>Terms</li>
+            <li>Customer Stories</li>
+          </ul>
+        </div>
+        <div>
+          <strong>Solutions</strong>
+          <ul>
+            <li>Pricing</li>
+            <li>Download</li>
+            <li>Data Service</li>
+            <li>Web Scraping Blog</li>
+          </ul>
+        </div>
+        <div>
+          <strong>Resources</strong>
+          <ul>
+            <li>Help Center</li>
+            <li>API Docs</li>
+            <li>Whitepapers</li>
+            <li>Community</li>
+          </ul>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

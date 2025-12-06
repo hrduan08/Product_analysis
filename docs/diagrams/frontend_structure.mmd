@@ -1,0 +1,12 @@
+graph LR
+  App[App.tsx] --> PlatformSwitch[PlatformSwitch.tsx]
+  App --> SearchBar[SearchBar.tsx]
+  SearchBar --> HistoryChips[History Chips]
+  App --> ResultSummary[ResultSummary]
+  App --> ResultList[ResultList.tsx]
+  ResultList --> YouTubeCard[YouTubeCard.tsx]
+  ResultList --> RedditCard[RedditCard.tsx]
+  App --> LoadingSkeleton[LoadingSkeleton.tsx]
+  App --> EmptyState[EmptyState.tsx]
+  App --> Toast[Toast.tsx]
+  App --> Pagination[Pagination.tsx]
