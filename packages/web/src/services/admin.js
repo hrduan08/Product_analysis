@@ -75,3 +75,12 @@ export async function fetchAdminAlerts(params) {
     }
     return (await response.json());
 }
+export async function fetchAdminUsers(params) {
+    const response = await fetch(`${API_BASE}/api/admin/users`, {
+        headers: buildHeaders(params.token)
+    });
+    if (!response.ok) {
+        throw new Error(await response.text());
+    }
+    return (await response.json());
+}

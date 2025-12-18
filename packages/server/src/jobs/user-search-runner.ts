@@ -2,8 +2,12 @@ import { formatISO } from 'date-fns';
 
 import { cronConfig } from '../config/cron.js';
 import { mailConfig } from '../config/mail.js';
-import { getNewFeedbackItemsSince } from '../services/feedback-store.js';
-import type { FeedbackEntity } from '../services/feedback-store.js';
+import {
+  getUserFeedbackItemsByIds,
+  type UserFeedbackWithItem,
+  markUserFeedbackItemsNotified,
+  type FeedbackEntity
+} from '../services/feedback-store.js';
 import {
   computeNextRunAt,
   getSupportedProviderPlatforms,
@@ -19,7 +23,7 @@ import { runKeywordSync } from './keyword-sync.js';
 import { getTierLimitsByStatus } from '../config/search-limits.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { YoutubeRateLimitError } from '../services/youtube/quota-manager.js';
-import { sendFeishuWebhookMessage, type FeishuWebhookPayload } from '../services/feishu.js';
+import { sendFeishuWebhookMessage, buildFeishuTextPayload, type FeishuWebhookPayload } from '../services/feishu.js';
 
 export type UserSearchJobResult = {
   processed: number;
@@ -40,6 +44,10 @@ const FEISHU_DATE_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
 
 const NUMBER_FORMATTER = new Intl.NumberFormat('zh-CN');
 const MAX_FEISHU_CARD_ITEMS = 5;
+const MAX_PUSH_ITEMS = 10;
+const MAX_RELEVANT_CANDIDATES = 25;
+const YOUTUBE_RECENT_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<UserSearchJobResult> {
   const configs = await listDueUserSearchConfigs(now);
@@ -73,7 +81,7 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
         lastNotifiedAt: config.last_notified_at ?? null
       });
       await recordNotifyJob({
-        status: activePlatforms.length === 0 ? 'partial' : 'success',
+        processStatus: 'success',
         totalNew: 0,
         totalSent: 0,
         userId,
@@ -91,31 +99,33 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
     }
 
     triggered += 1;
-    const reference = config.last_notified_at ?? new Date(0);
-
     try {
-      const syncResult = await runKeywordSync({
+      const langRegion = getLanguageRegionFromTimezone(config.timezone);
+      const selection = await selectCandidates({
         keywords,
         platforms: activePlatforms,
-        fetchLimit: cronConfig.fetchLimit,
-        logLabel
+        logLabel,
+        userId,
+        langRegion,
+        now
       });
-
-      const newItems = await getNewFeedbackItemsSince(reference, {
-        platforms: activePlatforms,
-        keywords
-      });
+      const selectedItems = selection.selectedItems;
+      const totalCandidates = selection.candidateCount;
+      const successCount = selection.successCount;
+      const failCount = selection.failCount;
 
       const summary = {
-        totalCreated: syncResult.created,
-        totalUpdated: syncResult.updated,
-        startedAt: syncResult.startedAt,
-        finishedAt: syncResult.finishedAt,
+        totalCreated: selection.totalCreated,
+        totalUpdated: selection.totalUpdated,
+        userCreated: selection.userCreated,
+        userUpdated: selection.userUpdated,
+        startedAt: selection.startedAt,
+        finishedAt: selection.finishedAt,
         lastSuccessAt: config.last_notified_at ?? null
       };
 
       const mailPayload = buildMailContent({
-        items: newItems,
+        items: selectedItems,
         summary,
         context: {
           platforms: activePlatforms.join(', '),
@@ -126,7 +136,7 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
 
       const shouldSendEmail = config.notify_channels.includes('email');
       const shouldSendFeishu = config.notify_channels.includes('feishu');
-      const hasNewItems = newItems.length > 0;
+      const hasNewItems = totalCandidates > 0;
       const allowEmptyNotification = mailConfig.sendWhenEmpty;
 
       const attemptEmail = shouldSendEmail && (hasNewItems || allowEmptyNotification);
@@ -137,15 +147,17 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
       let emailDelivered = false;
       let feishuDelivered = false;
       const channelErrors: Record<string, string> = {};
+      let emailAccepted = 0;
+      let feishuMessagesSent = 0;
 
       if (attemptEmail) {
         try {
           const sendResult = await sendMail(mailPayload, [config.notify_email]);
-          totalSent = sendResult.acceptedRecipients;
+          emailAccepted = sendResult.acceptedRecipients;
           messageId = sendResult.messageId;
-          emailDelivered = totalSent > 0;
+          emailDelivered = emailAccepted > 0;
           console.log(
-            `${logLabel} 邮件发送完成，messageId=${messageId ?? 'n/a'}，新增条数=${newItems.length}`
+            `${logLabel} 邮件发送完成，messageId=${messageId ?? 'n/a'}，新增条数=${selectedItems.length}`
           );
         } catch (error) {
           channelErrors.email = error instanceof Error ? error.message : String(error);
@@ -157,18 +169,36 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
 
       if (attemptFeishu) {
         try {
-          await sendFeishuWebhookMessage({
+          const chunks = chunkArray(selectedItems, MAX_FEISHU_CARD_ITEMS);
+          let sentCount = 0;
+
+          for (const chunk of chunks) {
+            await sendFeishuWebhookMessage({
             webhook: config.feishu_webhook!,
             payload: buildFeishuCardPayload({
-              items: newItems,
+              items: chunk,
               keywords,
               platforms: activePlatforms,
               summary
             })
           });
+            sentCount += 1;
+          }
+
+          // 追加一条纯文本兜底，便于人工确认消息是否送达
+          await sendFeishuWebhookMessage({
+            webhook: config.feishu_webhook!,
+            payload: buildFeishuTextPayload(
+              `本轮定时搜索：新增 ${selectedItems.length} 条，关键词：${keywords.join(
+                ', '
+              ) || '-'}，平台：${activePlatforms.join(', ') || '-'}。如未看到卡片，请查看机器人消息或刷新群聊。`
+            )
+          });
+          sentCount += 1;
+          feishuMessagesSent = sentCount;
           feishuDelivered = true;
           await updateFeishuChannelStatus(userId, { status: 'ok' }).catch(() => undefined);
-          console.log(`${logLabel} 飞书通知发送完成，新增条数=${newItems.length}`);
+          console.log(`${logLabel} 飞书通知发送完成，新增条数=${selectedItems.length}，发送卡片 ${chunks.length} 条`);
         } catch (error) {
           channelErrors.feishu = error instanceof Error ? error.message : String(error);
           await updateFeishuChannelStatus(userId, { status: 'failed' }).catch(() => undefined);
@@ -185,33 +215,54 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
       const attemptedChannels = Number(attemptEmail) + Number(attemptFeishu);
       const successfulChannels = Number(emailDelivered && attemptEmail) + Number(feishuDelivered && attemptFeishu);
 
-      if (attemptedChannels > 0 && successfulChannels === 0) {
+      const deliveredAny = successfulChannels > 0;
+      if (attemptedChannels > 0 && !deliveredAny) {
         const errorMessages = Object.values(channelErrors);
         throw new Error(errorMessages[0] ?? '通知发送失败');
       }
 
-      if (emailDelivered || feishuDelivered) {
+      if (deliveredAny) {
         delivered += 1;
       }
 
+      totalSent = deliveredAny ? selectedItems.length : 0;
+
       const nextRun = computeNextRunAt(slots, config.timezone);
-      const shouldUpdateLastNotified = emailDelivered || feishuDelivered || hasNewItems;
+      const shouldUpdateLastNotified = deliveredAny;
+
+      if (shouldUpdateLastNotified && selectedItems.length > 0) {
+        await markUserFeedbackItemsNotified(userId, selectedItems.map((item) => item.id)).catch(() => undefined);
+      }
 
       await updateExecutionMetadata({
         userId,
         nextRunAt: nextRun,
-        lastRunAt: syncResult.finishedAt,
-        lastNotifiedAt: shouldUpdateLastNotified ? syncResult.finishedAt : config.last_notified_at ?? null
+        lastRunAt: selection.finishedAt,
+        lastNotifiedAt: shouldUpdateLastNotified ? selection.finishedAt : config.last_notified_at ?? null
       });
 
-      const jobStatus = Object.keys(channelErrors).length > 0 ? 'partial' : 'success';
+      const processStatus = failCount > 0
+        ? successCount > 0
+          ? ('partial' as const)
+          : ('failed' as const)
+        : ('success' as const);
+
+      const notifyStatus =
+        attemptedChannels === 0
+          ? null
+          : Object.keys(channelErrors).length === 0
+            ? ('success' as const)
+            : successfulChannels > 0
+              ? ('partial' as const)
+              : ('failed' as const);
 
       await recordNotifyJob({
-        status: jobStatus,
-        totalNew: newItems.length,
+        processStatus,
+        notifyStatus: notifyStatus ?? undefined,
+        totalNew: selection.userCreated,
         totalSent,
         mailMessageId: messageId,
-        runAt: syncResult.finishedAt,
+        runAt: selection.finishedAt,
         userId,
         context: {
           platforms: config.platforms,
@@ -234,6 +285,12 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
               error: channelErrors.feishu ?? null
             }
           },
+          counts: {
+            candidates: totalCandidates,
+            selected: selectedItems.length,
+            emailAccepted,
+            feishuMessagesSent
+          },
           nextRunAt: nextRun ? formatISO(nextRun) : null
         }
       });
@@ -253,7 +310,8 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
       });
 
       await recordNotifyJob({
-        status: error instanceof YoutubeRateLimitError ? 'partial' : 'failed',
+        processStatus: 'failed',
+        notifyStatus: undefined,
         totalNew: 0,
         totalSent: 0,
         errorMessage: message,
@@ -341,54 +399,65 @@ function buildFeishuCardPayload(input: {
   } else {
     const limitedItems = input.items.slice(0, MAX_FEISHU_CARD_ITEMS);
     limitedItems.forEach((item, index) => {
-      const metric = formatMetricForFeishu(item);
-      const detailLines = [
-        `**#${index + 1} ${escapeFeishuMarkdown(item.title)}**`,
-        item.author ? `作者：${escapeFeishuMarkdown(item.author)}` : null,
-        metric ? `${item.platform === 'youtube' ? '播放量' : '热度'}：${metric}` : null,
-        item.published_at ? `发布时间：${FEISHU_DATE_FORMATTER.format(item.published_at)}` : null
-      ]
-        .filter(Boolean)
-        .join('\n');
-      const thumbnailUrl = getThumbnailFromEntity(item);
+      const metric = formatMetricForFeishu(item) ?? '-';
+      const published = item.published_at ?? item.first_seen_at ?? null;
+      const publishedText = published ? FEISHU_DATE_FORMATTER.format(published) : '未知';
+      const keyword = item.keyword ? escapeFeishuMarkdown(item.keyword) : '-';
+      const author = item.author ? escapeFeishuMarkdown(item.author) : '-';
 
-      if (thumbnailUrl) {
-        elements.push({
-          tag: 'column_set',
-          columns: [
-            {
-              tag: 'column',
-              width: 'stretch',
-              elements: [
-                {
-                  tag: 'div',
-                  text: { tag: 'lark_md', content: detailLines }
-                }
-              ]
-            },
-            {
-              tag: 'column',
-              width: 'auto',
-              elements: [
-                {
-                  tag: 'img',
-                  img_key: thumbnailUrl,
-                  alt: {
-                    tag: 'plain_text',
-                    content: '封面图'
-                  },
-                  mode: 'fit_vertical'
-                }
-              ]
-            }
-          ]
-        });
-      } else {
-        elements.push({
-          tag: 'div',
-          text: { tag: 'lark_md', content: detailLines }
-        });
-      }
+      elements.push({
+        tag: 'div',
+        text: { tag: 'lark_md', content: `**#${index + 1} ${escapeFeishuMarkdown(item.title)}**` }
+      });
+
+      elements.push({
+        tag: 'column_set',
+        columns: [
+          {
+            tag: 'column',
+            width: 'equal',
+            elements: [{ tag: 'markdown', content: `**时间：** ${publishedText}` }]
+          },
+          {
+            tag: 'column',
+            width: 'equal',
+            elements: [{ tag: 'markdown', content: `**平台：** ${formatPlatformLabel(item.platform)}` }]
+          },
+          {
+            tag: 'column',
+            width: 'equal',
+            elements: [{ tag: 'markdown', content: `**关键词：** ${keyword}` }]
+          }
+        ]
+      });
+
+      elements.push({
+        tag: 'column_set',
+        columns: [
+          {
+            tag: 'column',
+            width: 'equal',
+            elements: [{ tag: 'markdown', content: `**作者：** ${author}` }]
+          },
+          {
+            tag: 'column',
+            width: 'equal',
+            elements: [{ tag: 'markdown', content: `**播放量/热度：** ${metric}` }]
+          },
+          {
+            tag: 'column',
+            width: 'equal',
+            elements: [
+              {
+                tag: 'markdown',
+                content: `**评论数：** ${
+                  typeof item.comment_count === 'number' ? NUMBER_FORMATTER.format(item.comment_count) : '-'
+                }`
+              }
+            ]
+          }
+        ]
+      });
 
       if (item.url) {
         elements.push({
@@ -471,15 +540,195 @@ function escapeFeishuMarkdown(value: string): string {
   return value.replace(/([\\`*_{}\[\]()#+\-!>])/g, '\\$1');
 }
 
-function getThumbnailFromEntity(item: FeedbackEntity): string | null {
-  if (typeof item.thumbnail_url === 'string' && item.thumbnail_url.trim().length > 0) {
-    return item.thumbnail_url;
-  }
-  if (item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)) {
-    const thumbnail = (item.metadata as Record<string, unknown>).thumbnailUrl;
-    if (typeof thumbnail === 'string' && thumbnail.trim().length > 0) {
-      return thumbnail;
+function getLanguageRegionFromTimezone(timezone?: string | null): { relevanceLanguage?: string; regionCode?: string } | null {
+  if (!timezone) return null;
+  const map: Record<
+    string,
+    {
+      relevanceLanguage: string;
+      regionCode: string;
     }
+  > = {
+    'Asia/Shanghai': { relevanceLanguage: 'zh-CN', regionCode: 'CN' },
+    'Asia/Chongqing': { relevanceLanguage: 'zh-CN', regionCode: 'CN' },
+    'Asia/Beijing': { relevanceLanguage: 'zh-CN', regionCode: 'CN' },
+    'Asia/Taipei': { relevanceLanguage: 'zh-TW', regionCode: 'TW' },
+    'Asia/Hong_Kong': { relevanceLanguage: 'zh-HK', regionCode: 'HK' },
+    'Asia/Macau': { relevanceLanguage: 'zh-MO', regionCode: 'MO' },
+    'Asia/Tokyo': { relevanceLanguage: 'ja-JP', regionCode: 'JP' },
+    'Asia/Seoul': { relevanceLanguage: 'ko-KR', regionCode: 'KR' },
+    'Europe/London': { relevanceLanguage: 'en-GB', regionCode: 'GB' },
+    'Europe/Berlin': { relevanceLanguage: 'de-DE', regionCode: 'DE' },
+    'Europe/Paris': { relevanceLanguage: 'fr-FR', regionCode: 'FR' },
+    'America/New_York': { relevanceLanguage: 'en-US', regionCode: 'US' },
+    'America/Los_Angeles': { relevanceLanguage: 'en-US', regionCode: 'US' },
+    'America/Chicago': { relevanceLanguage: 'en-US', regionCode: 'US' },
+    'America/Toronto': { relevanceLanguage: 'en-CA', regionCode: 'CA' },
+    'Australia/Sydney': { relevanceLanguage: 'en-AU', regionCode: 'AU' }
+  };
+  const found = map[timezone];
+  return found ?? null;
+}
+
+type CandidateSelection = {
+  selectedItems: FeedbackEntity[];
+  candidateCount: number;
+  totalCreated: number;
+  totalUpdated: number;
+  userCreated: number;
+  userUpdated: number;
+  startedAt: Date;
+  finishedAt: Date;
+  successCount: number;
+  failCount: number;
+};
+
+async function selectCandidates(params: {
+  keywords: string[];
+  platforms: string[];
+  logLabel: string;
+  userId: string;
+  langRegion: { relevanceLanguage?: string; regionCode?: string } | null;
+  now: Date;
+}): Promise<CandidateSelection> {
+  const startedAt = new Date();
+  const candidates: UserFeedbackWithItem[] = [];
+  const seenIds = new Set<string>();
+  let successCount = 0;
+  let failCount = 0;
+
+  let totalCreated = 0;
+  let totalUpdated = 0;
+  let userCreated = 0;
+  let userUpdated = 0;
+  let finishedAt = startedAt;
+
+  const addCandidates = async (processedIds: string[]) => {
+    if (processedIds.length === 0) return;
+    const items = await getUserFeedbackItemsByIds(params.userId, processedIds);
+    for (const item of items) {
+      if (item.last_notified_at) continue; // 已推送过
+      if (seenIds.has(item.feedback.id)) continue;
+      candidates.push(item);
+      seenIds.add(item.feedback.id);
+    }
+  };
+
+  // 第一轮：近 30 天，按相关性
+  const recentAfter = new Date(params.now.getTime() - YOUTUBE_RECENT_DAYS * DAY_MS).toISOString();
+  const firstResult = await runKeywordSync({
+    keywords: params.keywords,
+    platforms: params.platforms,
+    fetchLimit: cronConfig.fetchLimit,
+    logLabel: `${params.logLabel}[recent]`,
+    userId: params.userId,
+    relevanceLanguage: params.langRegion?.relevanceLanguage,
+    regionCode: params.langRegion?.regionCode,
+    order: 'relevance',
+    publishedAfter: recentAfter,
+    maxPages: 1
+  });
+  totalCreated += firstResult.created;
+  totalUpdated += firstResult.updated;
+  userCreated += firstResult.userCreated;
+  userUpdated += firstResult.userUpdated;
+  successCount += firstResult.stats.filter((item) => item.success).length;
+  failCount += firstResult.stats.filter((item) => !item.success).length;
+  finishedAt = firstResult.finishedAt;
+  await addCandidates(firstResult.userProcessedIds ?? []);
+
+  // 如不足 10，再补齐一轮相关性（不限日期）
+  if (candidates.length < MAX_PUSH_ITEMS) {
+    const supplementResult = await runKeywordSync({
+      keywords: params.keywords,
+      platforms: params.platforms,
+      fetchLimit: cronConfig.fetchLimit,
+      logLabel: `${params.logLabel}[relevance]`,
+      userId: params.userId,
+      relevanceLanguage: params.langRegion?.relevanceLanguage,
+      regionCode: params.langRegion?.regionCode,
+      order: 'relevance',
+      maxPages: 1
+    });
+    totalCreated += supplementResult.created;
+    totalUpdated += supplementResult.updated;
+    userCreated += supplementResult.userCreated;
+    userUpdated += supplementResult.userUpdated;
+    successCount += supplementResult.stats.filter((item) => item.success).length;
+    failCount += supplementResult.stats.filter((item) => !item.success).length;
+    finishedAt = supplementResult.finishedAt;
+    await addCandidates(supplementResult.userProcessedIds ?? []);
   }
-  return null;
+
+  const relevantCandidates = candidates
+    .map((item) => ({
+      feedback: item.feedback,
+      priority: getMatchPriority((item.feedback.metadata as any)?.matchLevel)
+    }))
+    .filter((item) => item.priority > 0 && item.priority <= 5);
+
+  const sortedByRelevance = relevantCandidates.sort((a, b) => {
+    if (a.priority !== b.priority) return a.priority - b.priority;
+    const viewDiff = (b.feedback.view_count ?? 0) - (a.feedback.view_count ?? 0);
+    if (viewDiff !== 0) return viewDiff;
+    const commentDiff = (b.feedback.comment_count ?? 0) - (a.feedback.comment_count ?? 0);
+    if (commentDiff !== 0) return commentDiff;
+    const dateA = a.feedback.published_at ? new Date(a.feedback.published_at).getTime() : 0;
+    const dateB = b.feedback.published_at ? new Date(b.feedback.published_at).getTime() : 0;
+    return dateB - dateA;
+  });
+
+  const candidateCount = sortedByRelevance.length;
+  const candidatePool = sortedByRelevance.slice(0, MAX_RELEVANT_CANDIDATES).map((item) => item.feedback);
+
+  const selectedItems = [...candidatePool]
+    .sort((a, b) => {
+      const viewDiff = (b.view_count ?? 0) - (a.view_count ?? 0);
+      if (viewDiff !== 0) return viewDiff;
+      const commentDiff = (b.comment_count ?? 0) - (a.comment_count ?? 0);
+      if (commentDiff !== 0) return commentDiff;
+      const dateA = a.published_at ? new Date(a.published_at).getTime() : 0;
+      const dateB = b.published_at ? new Date(b.published_at).getTime() : 0;
+      return dateB - dateA;
+    })
+    .slice(0, MAX_PUSH_ITEMS);
+
+  return {
+    selectedItems,
+    totalCreated,
+    totalUpdated,
+    userCreated,
+    userUpdated,
+    startedAt,
+    finishedAt,
+    candidateCount,
+    successCount,
+    failCount
+  };
+}
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  if (size <= 0) return [items];
+  const result: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    result.push(items.slice(i, i + size));
+  }
+  return result;
+}
+
+function getMatchPriority(matchLevel?: string | null): number {
+  switch ((matchLevel ?? '').toUpperCase()) {
+    case 'A':
+      return 1; // 标题包含短语
+    case 'B':
+      return 2; // 标题包含全部词
+    case 'C':
+      return 3; // 标签命中
+    case 'D':
+      return 4; // 描述命中
+    case 'E':
+      return 5; // 任意词命中
+    default:
+      return 99; // 无命中，丢弃
+  }
 }

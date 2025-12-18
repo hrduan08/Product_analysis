@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
+import { VideoList } from '../components/VideoList';
 import { Toast } from '../components/Toast';
 import { useAuth } from '../contexts/AuthContext';
 import { formatRunTime } from '../utils/date';
@@ -8,11 +9,16 @@ import { fetchSubscription, type Plan } from '../services/billing';
 import { fetchTaskHistory, type TaskRun } from '../services/taskHistory';
 import { fetchSearchConfig, type SearchConfig } from '../services/searchConfig';
 import { formatPlatformList } from '../utils/platform';
+import { searchFeedback } from '../services/api';
+import type { FeedbackItem, Platform } from '../types/feedback';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const SUPER_ADMINS = ['474226642@qq.com'];
 const ADMIN_TOKEN_KEY = 'pi-admin-token';
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_TOKEN ?? '';
+const INSTANT_SEARCH_WHITELIST = ['474226642@qq.com', 'dhrstudy2008@126.com'];
+const INSTANT_PAGE_SIZE = 20;
+const INSTANT_FETCH_LIMIT = 50;
 
 const NOTIFY_LABELS: Record<string, string> = {
   feishu: '飞书',
@@ -38,6 +44,16 @@ export function SearchPage() {
   const [adminModalOpen, setAdminModalOpen] = useState(false);
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [adminPasswordError, setAdminPasswordError] = useState<string | null>(null);
+  const [instantQuery, setInstantQuery] = useState('');
+  const [instantPlatforms, setInstantPlatforms] = useState<Platform[]>(['youtube']);
+  const [instantSearched, setInstantSearched] = useState(false);
+  const [instantLoading, setInstantLoading] = useState(false);
+  const [instantError, setInstantError] = useState<string | null>(null);
+  const [instantResults, setInstantResults] = useState<FeedbackItem[]>([]);
+  const [instantTotalCount, setInstantTotalCount] = useState<number | null>(null);
+  const [instantKeywordsUsed, setInstantKeywordsUsed] = useState<string[]>([]);
+  const [instantPlatformsUsed, setInstantPlatformsUsed] = useState<Platform[]>([]);
+  const [instantPage, setInstantPage] = useState(1);
   const [currentPlan, setCurrentPlan] = useState<Plan | null>(null);
   const [planExpireAt, setPlanExpireAt] = useState<string | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
@@ -48,6 +64,9 @@ export function SearchPage() {
   const [taskRuns, setTaskRuns] = useState<TaskRun[]>([]);
   const [taskRunsLoading, setTaskRunsLoading] = useState(false);
   const [taskRunsError, setTaskRunsError] = useState<string | null>(null);
+  const canUseInstantSearch = Boolean(
+    user?.email && INSTANT_SEARCH_WHITELIST.includes(user.email.toLowerCase())
+  );
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -145,6 +164,25 @@ export function SearchPage() {
         `定时监控时间：${searchTimesText}`,
         `结果通知方式：${searchNotifyText}`
       ];
+  const instantResultSummary =
+    instantSearched && !instantLoading && instantResults.length > 0
+      ? `关键词：${instantKeywordsUsed.join('、')} · 平台：${instantPlatformsUsed
+          .map((platform) => (platform === 'youtube' ? 'YouTube' : 'Reddit'))
+          .join(' + ')} · 共 ${instantTotalCount ?? instantResults.length} 条`
+      : null;
+  const showInstantEmptyState = instantSearched && !instantLoading && instantResults.length === 0 && !instantError;
+  const instantTotalPages = instantResults.length > 0 ? Math.ceil(instantResults.length / INSTANT_PAGE_SIZE) : 0;
+  const pagedInstantResults = useMemo(() => {
+    if (instantResults.length === 0) return [];
+    const start = (instantPage - 1) * INSTANT_PAGE_SIZE;
+    return instantResults.slice(start, start + INSTANT_PAGE_SIZE);
+  }, [instantResults, instantPage]);
+
+  useEffect(() => {
+    if (instantTotalPages > 0 && instantPage > instantTotalPages) {
+      setInstantPage(instantTotalPages);
+    }
+  }, [instantPage, instantTotalPages]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -285,6 +323,95 @@ export function SearchPage() {
     navigate('/admin/manual-orders');
   };
 
+  const handleInstantPlatformToggle = (platform: Platform) => {
+    setInstantPlatforms((prev) => {
+      if (prev.includes(platform)) {
+        return prev.filter((value) => value !== platform);
+      }
+      return [...prev, platform];
+    });
+  };
+
+  const handleInstantSearch = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmed = instantQuery.trim();
+    setInstantSearched(false);
+    if (!trimmed) {
+      setInstantError('请输入要搜索的关键词');
+      setInstantResults([]);
+      setInstantTotalCount(null);
+      setInstantKeywordsUsed([]);
+      return;
+    }
+    if (instantPlatforms.length === 0) {
+      setInstantError('请至少选择一个平台');
+      setInstantResults([]);
+      setInstantTotalCount(null);
+      setInstantKeywordsUsed([]);
+      return;
+    }
+    const keywords = Array.from(
+      new Set(
+        trimmed
+          .split(/[\n,，、|]+/)
+          .map((value) => value.trim())
+          .filter(Boolean)
+      )
+    );
+    if (keywords.length === 0) {
+      setInstantError('请输入有效的关键词');
+      setInstantResults([]);
+      setInstantTotalCount(null);
+      setInstantKeywordsUsed([]);
+      return;
+    }
+    setInstantLoading(true);
+    setInstantError(null);
+    try {
+      const responses = await Promise.all(
+        instantPlatforms.flatMap((platform) =>
+          keywords.map(async (keyword) => {
+            const data = await searchFeedback({
+              platform,
+              query: keyword,
+              limit: INSTANT_FETCH_LIMIT
+            });
+            return data;
+          })
+        )
+      );
+      const merged = responses.flatMap((response) => response.items ?? []);
+      merged.sort((a, b) => new Date(b.fetchedAt).getTime() - new Date(a.fetchedAt).getTime());
+      setInstantResults(merged);
+      const total = responses.reduce((sum, response) => {
+        const count = response.pageInfo.totalResults ?? response.items.length ?? 0;
+        return sum + count;
+      }, 0);
+      setInstantTotalCount(total);
+      setInstantKeywordsUsed(keywords);
+      setInstantPlatformsUsed(instantPlatforms);
+      setInstantPage(1);
+      setInstantSearched(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '搜索失败，请稍后重试';
+      setInstantError(message);
+      setInstantResults([]);
+      setInstantTotalCount(null);
+      setInstantKeywordsUsed([]);
+    } finally {
+      setInstantLoading(false);
+    }
+  };
+
+  const handleInstantCopyLink = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast('链接已复制');
+    } catch {
+      showToast('复制失败，请手动复制', 'error');
+    }
+  };
+
   const handleLogout = async () => {
     setLogoutLoading(true);
     try {
@@ -376,6 +503,79 @@ export function SearchPage() {
         </section>
 
         <div className="dashboard-grid">
+          {canUseInstantSearch ? (
+            <article className="dashboard-card dashboard-card--wide">
+              <div className="dashboard-card__header">
+                <h3>即时搜索</h3>
+                {instantResultSummary ? (
+                  <span className="account-banner__summary-meta">{instantResultSummary}</span>
+                ) : null}
+              </div>
+              <form className="instant-search-form" onSubmit={handleInstantSearch}>
+                <div className="instant-search-row">
+                  <div className="instant-search-form__group instant-search-form__group--platforms">
+                    <span className="instant-search-form__label">平台</span>
+                    <div className="instant-search-platforms">
+                      {(['youtube', 'reddit'] as Platform[]).map((platform) => (
+                        <label key={platform} className="instant-search-platforms__option">
+                          <input
+                            type="checkbox"
+                            checked={instantPlatforms.includes(platform)}
+                            onChange={() => handleInstantPlatformToggle(platform)}
+                          />
+                          {platform === 'youtube' ? 'YouTube' : 'Reddit'}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="instant-search-row instant-search-row--keywords">
+                  <div className="instant-search-form__group instant-search-form__group--grow">
+                    <span className="instant-search-form__label">搜索关键词</span>
+                    <input
+                      type="text"
+                      value={instantQuery}
+                      onChange={(event) => setInstantQuery(event.target.value)}
+                      placeholder="例如：Helio Strap 最新评价"
+                    />
+                  </div>
+                  <div className="instant-search-form__actions">
+                    <button type="submit" className="btn primary" disabled={instantLoading}>
+                      {instantLoading ? '搜索中...' : '立即搜索'}
+                    </button>
+                  </div>
+                </div>
+              </form>
+              {instantError ? <div className="subscription-error">{instantError}</div> : null}
+              {showInstantEmptyState ? (
+                <p className="task-table__empty">暂未检索到相关内容，换个关键词或平台试试。</p>
+              ) : null}
+              <VideoList items={pagedInstantResults} onCopyLink={handleInstantCopyLink} />
+              {instantTotalPages > 1 ? (
+                <div className="instant-search-pagination">
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    disabled={instantPage <= 1}
+                    onClick={() => setInstantPage((page) => Math.max(1, page - 1))}
+                  >
+                    上一页
+                  </button>
+                  <span className="instant-search-pagination__info">
+                    第 {instantPage} / {instantTotalPages} 页
+                  </span>
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    disabled={instantPage >= instantTotalPages}
+                    onClick={() => setInstantPage((page) => Math.min(instantTotalPages, page + 1))}
+                  >
+                    下一页
+                  </button>
+                </div>
+              ) : null}
+            </article>
+          ) : null}
           <article className="dashboard-card dashboard-card--wide">
             <div className="dashboard-card__header">
               <h3>定时任务执行记录</h3>

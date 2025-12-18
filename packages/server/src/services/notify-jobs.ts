@@ -3,7 +3,7 @@ import { prisma } from '../db/prisma.js';
 
 export async function getLastSuccessfulJobRunAt(): Promise<Date | null> {
   const job = await prisma.notifyJob.findFirst({
-    where: { status: 'success' },
+    where: { process_status: 'success' },
     orderBy: { run_at: 'desc' },
     select: { run_at: true }
   });
@@ -11,7 +11,8 @@ export async function getLastSuccessfulJobRunAt(): Promise<Date | null> {
 }
 
 type NotifyJobInput = {
-  status: JobStatus;
+  processStatus?: JobStatus;
+  notifyStatus?: JobStatus;
   totalNew: number;
   totalSent?: number;
   mailMessageId?: string;
@@ -22,16 +23,20 @@ type NotifyJobInput = {
 };
 
 export async function recordNotifyJob(input: NotifyJobInput): Promise<void> {
-  await prisma.notifyJob.create({
-    data: {
-      status: input.status,
-      total_new: input.totalNew,
-      total_sent: input.totalSent ?? 0,
-      mail_message_id: input.mailMessageId ?? null,
-      error_message: input.errorMessage ?? null,
-      run_at: input.runAt,
-      user_id: input.userId ?? null,
-      context: input.context ?? null
-    }
-  });
+  const data: Prisma.NotifyJobCreateInput = {
+    process_status: input.processStatus ?? null,
+    notify_status: input.notifyStatus ?? null,
+    total_new: input.totalNew,
+    total_sent: input.totalSent ?? 0,
+    mail_message_id: input.mailMessageId ?? null,
+    error_message: input.errorMessage ?? null,
+    user_id: input.userId ?? null,
+    context: input.context ?? null
+  };
+
+  if (input.runAt) {
+    data.run_at = input.runAt;
+  }
+
+  await prisma.notifyJob.create({ data });
 }

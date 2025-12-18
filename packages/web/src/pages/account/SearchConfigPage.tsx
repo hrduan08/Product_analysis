@@ -628,6 +628,9 @@ export function SearchConfigPage(): JSX.Element {
               <p className="config-section__hint">
                 飞书机器人 Webhook（飞书群聊 &gt; 添加机器人 &gt; 自定义机器人 &gt; 复制 Webhook）
               </p>
+              <p className="config-section__hint">
+                填写完成后请先点击「测试飞书通知」，到飞书群里确认能收到消息再继续。
+              </p>
               <div className="config-inline-form">
                 <input
                   type="url"

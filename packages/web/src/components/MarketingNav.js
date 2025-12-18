@@ -20,7 +20,7 @@ export function MarketingNav() {
         return USER_STATUS_LABEL[user.status] ?? user.status;
     }, [user]);
     const trialInfo = useMemo(() => {
-        if (!user || !user.trialEndsAt) {
+        if (!user || user.status !== 'trialing' || !user.trialEndsAt) {
             return null;
         }
         const endsAt = new Date(user.trialEndsAt);

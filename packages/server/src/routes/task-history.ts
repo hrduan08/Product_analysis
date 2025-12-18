@@ -29,10 +29,13 @@ router.get('/app/task-history', async (req, res, next) => {
 
     const runs = jobs.map((job) => {
       const ctx = (job.context ?? {}) as Record<string, unknown>;
+      const derivedStatus = deriveStatus(job.process_status, job.notify_status);
       return {
         id: job.id,
         runAt: job.run_at.toISOString(),
-        status: job.status,
+        status: derivedStatus,
+        processStatus: job.process_status ?? null,
+        notifyStatus: job.notify_status ?? null,
         newItems: job.total_new,
         totalSent: job.total_sent,
         errorMessage: job.error_message ?? null,
@@ -56,6 +59,25 @@ function ensureStringArray(value: unknown): string[] {
   return value
     .map((item) => (typeof item === 'string' ? item : String(item)))
     .filter((item) => item.length > 0);
+}
+
+function deriveStatus(
+  processStatus: 'success' | 'failed' | 'partial' | null,
+  notifyStatus: 'success' | 'failed' | 'partial' | null
+): 'success' | 'failed' | 'partial' {
+  if (processStatus === 'failed' || processStatus === null) {
+    return 'failed';
+  }
+  if (notifyStatus === 'failed') {
+    return 'partial';
+  }
+  if (processStatus === 'partial') {
+    return 'partial';
+  }
+  if (notifyStatus === 'partial') {
+    return 'partial';
+  }
+  return 'success';
 }
 
 export default router;

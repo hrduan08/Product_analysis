@@ -5,85 +5,95 @@ import { youtubeConfig } from '../config/youtube.js';
 const API_BASE = 'https://www.googleapis.com/youtube/v3';
 
 export class YoutubeProvider implements SearchProvider {
-  async search({ query, cursor, limit }: SearchParams): Promise<SearchResult> {
-    const resolvedLimit = Math.min(limit ?? youtubeConfig.maxResults, youtubeConfig.maxResults);
-    const searchParams = new URLSearchParams({
-      part: 'snippet',
-      type: 'video',
-      order: 'date',
-      maxResults: String(resolvedLimit),
-      q: query
-    });
+  async search({ query, cursor, limit, relevanceLanguage, regionCode, order, publishedAfter, maxPages }: SearchParams): Promise<SearchResult> {
+    const perPageLimit = Math.min(limit ?? youtubeConfig.maxResults, youtubeConfig.maxResults);
+    const pages = Math.max(1, Math.min(maxPages ?? 1, 10));
+    let pageToken = cursor ?? null;
+    const allItems: FeedbackItem[] = [];
+    let nextCursor: string | null = null;
 
-    if (cursor) {
-      searchParams.append('pageToken', cursor);
+    for (let page = 0; page < pages; page += 1) {
+      const searchParams = new URLSearchParams({
+        part: 'snippet',
+        type: 'video',
+        order: order ?? 'relevance',
+        maxResults: String(perPageLimit),
+        q: query
+      });
+
+      if (relevanceLanguage) {
+        searchParams.append('relevanceLanguage', relevanceLanguage);
+      }
+      if (regionCode) {
+        searchParams.append('regionCode', regionCode);
+      }
+      if (publishedAfter) {
+        searchParams.append('publishedAfter', publishedAfter);
+      }
+      if (pageToken) {
+        searchParams.append('pageToken', pageToken);
+      }
+
+      const searchData = await requestYoutube<any>('search', 'search', searchParams, {
+        hashKey: query
+      });
+
+      const videoIds: string[] = (searchData.items ?? [])
+        .map((item: any) => item?.id?.videoId)
+        .filter(Boolean);
+
+      if (videoIds.length === 0) {
+        nextCursor = searchData.nextPageToken ?? null;
+        break;
+      }
+
+      const detailParams = new URLSearchParams({
+        part: 'snippet,statistics',
+        id: videoIds.join(',')
+      });
+
+      const detailData = await requestYoutube<any>('videos', 'videos', detailParams, {
+        hashKey: query,
+        unitsOverride: youtubeConfig.videoUnitsPerCall,
+        calls: 1
+      });
+
+      const now = new Date().toISOString();
+      const detailItems: any[] = Array.isArray(detailData.items) ? detailData.items : [];
+      const pageItems: FeedbackItem[] = detailItems.map((video: any) => ({
+        platform: 'youtube',
+        keyword: query,
+        id: String(video.id),
+        title: String(video.snippet?.title ?? ''),
+        author: String(video.snippet?.channelTitle ?? ''),
+        publishedAt: String(video.snippet?.publishedAt ?? ''),
+        fetchedAt: now,
+        url: `https://www.youtube.com/watch?v=${video.id}`,
+        permalink: `https://www.youtube.com/watch?v=${video.id}`,
+        thumbnailUrl: String(video.snippet?.thumbnails?.medium?.url ?? ''),
+        viewCount: Number(video.statistics?.viewCount ?? 0),
+        score: null,
+        commentCount: video.statistics?.commentCount ? Number(video.statistics.commentCount) : null,
+        description: video.snippet?.description ? String(video.snippet.description) : null,
+        tags: Array.isArray(video.snippet?.tags) ? video.snippet.tags.map((tag: any) => String(tag)) : undefined,
+        labels: [String(video.snippet?.channelTitle ?? '')].filter(Boolean)
+      }));
+
+      allItems.push(...pageItems);
+
+      nextCursor = searchData.nextPageToken ?? null;
+      if (!nextCursor) {
+        break;
+      }
+      pageToken = nextCursor;
     }
-
-    const searchData = await requestYoutube<any>('search', 'search', searchParams, {
-      hashKey: query
-    });
-
-    const videoIds: string[] = (searchData.items ?? [])
-      .map((item: any) => item?.id?.videoId)
-      .filter(Boolean);
-
-    if (videoIds.length === 0) {
-      return {
-        items: [],
-        pageInfo: {
-          totalResults: Number(searchData.pageInfo?.totalResults ?? 0) || undefined,
-          resultsPerPage: Number(searchData.pageInfo?.resultsPerPage ?? 0) || undefined,
-          nextCursor: searchData.nextPageToken ?? null,
-          prevCursor: searchData.prevPageToken ?? null,
-          raw: {
-            nextPageToken: searchData.nextPageToken ?? null,
-            prevPageToken: searchData.prevPageToken ?? null
-          }
-        }
-      };
-    }
-
-    const detailParams = new URLSearchParams({
-      part: 'snippet,statistics',
-      id: videoIds.join(',')
-    });
-
-    const detailData = await requestYoutube<any>('videos', 'videos', detailParams, {
-      hashKey: query,
-      unitsOverride: youtubeConfig.videoUnitsPerCall,
-      calls: 1
-    });
-
-    const now = new Date().toISOString();
-    const detailItems: any[] = Array.isArray(detailData.items) ? detailData.items : [];
-    const items: FeedbackItem[] = detailItems.map((video: any) => ({
-      platform: 'youtube',
-      keyword: query,
-      id: String(video.id),
-      title: String(video.snippet?.title ?? ''),
-      author: String(video.snippet?.channelTitle ?? ''),
-      publishedAt: String(video.snippet?.publishedAt ?? ''),
-      fetchedAt: now,
-      url: `https://www.youtube.com/watch?v=${video.id}`,
-      permalink: `https://www.youtube.com/watch?v=${video.id}`,
-      thumbnailUrl: String(video.snippet?.thumbnails?.medium?.url ?? ''),
-      viewCount: Number(video.statistics?.viewCount ?? 0),
-      score: null,
-      commentCount: video.statistics?.commentCount ? Number(video.statistics.commentCount) : null,
-      labels: [String(video.snippet?.channelTitle ?? '')].filter(Boolean)
-    }));
 
     return {
-      items,
+      items: allItems,
       pageInfo: {
-        totalResults: Number(searchData.pageInfo?.totalResults ?? items.length) || undefined,
-        resultsPerPage: Number(searchData.pageInfo?.resultsPerPage ?? items.length) || undefined,
-        nextCursor: searchData.nextPageToken ?? null,
-        prevCursor: searchData.prevPageToken ?? null,
-        raw: {
-          nextPageToken: searchData.nextPageToken ?? null,
-          prevPageToken: searchData.prevPageToken ?? null
-        }
+        totalResults: undefined,
+        resultsPerPage: allItems.length,
+        nextCursor
       }
     };
   }

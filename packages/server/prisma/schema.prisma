@@ -98,6 +98,7 @@ model FeedbackItem {
   score         Int?
   comment_count Int?
   metadata      Json?     @db.JsonB
+  userFeedbackItems UserFeedbackItem[]
 
   @@unique([platform, external_id])
   @@index([keyword, last_seen_at(sort: Desc)])
@@ -119,7 +120,8 @@ model Subscription {
 model NotifyJob {
   id            String    @id @default(uuid()) @db.Uuid
   run_at        DateTime  @default(now()) @db.Timestamptz(6)
-  status        JobStatus
+  process_status JobStatus?
+  notify_status  JobStatus?
   total_new     Int       @default(0)
   total_sent    Int       @default(0)
   error_message String?
@@ -129,7 +131,7 @@ model NotifyJob {
 
   user User? @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  @@index([status, run_at(sort: Desc)])
+  @@index([run_at(sort: Desc)])
   @@index([user_id, run_at(sort: Desc)])
   @@map("notify_jobs")
 }
@@ -222,6 +224,7 @@ model User {
   notifyJobs     NotifyJob[]
   searchConfig   UserSearchConfig?
   feedbackReports FeedbackReport[]
+  userFeedbackItems UserFeedbackItem[]
 
   @@map("users")
 }
@@ -381,4 +384,21 @@ model PaymentOrder {
   @@index([subscription_id])
   @@index([plan_id])
   @@map("payment_orders")
+}
+
+/// 记录每个用户首次/最近看到的抓取内容，用于用户级去重与增量
+model UserFeedbackItem {
+  user_id          String   @db.Uuid
+  feedback_item_id String   @db.Uuid
+  first_seen_at    DateTime @default(now()) @db.Timestamptz(6)
+  last_seen_at     DateTime @default(now()) @db.Timestamptz(6)
+  last_notified_at DateTime? @db.Timestamptz(6)
+
+  user         User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  feedbackItem FeedbackItem @relation(fields: [feedback_item_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, feedback_item_id])
+  @@index([feedback_item_id])
+  @@index([last_seen_at])
+  @@map("user_feedback_items")
 }

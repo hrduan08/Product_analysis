@@ -42,9 +42,11 @@ export function VerifyEmailNoticePage() {
         </div>
       }
     >
-      <div className="auth-notice">
+      <div className="auth-notice auth-notice--compact">
         <p>请前往邮箱点击验证链接，链接有效期 24 小时。</p>
-        <p>如果长时间未收到，可以点击下方按钮重新发送。</p>
+        <p className="auth-notice__alert">
+          <strong>注意：</strong>收件箱没看到，请检查“垃圾邮件/垃圾箱”或其他分类；若仍未收到，可稍后再试或点击下方按钮重新发送。
+        </p>
         {message ? (
           <div
             className={`auth-notice__message auth-notice__message--${

@@ -4,6 +4,11 @@ export type SearchParams = {
   query: string;
   cursor?: string;
   limit?: number;
+  relevanceLanguage?: string;
+  regionCode?: string;
+  order?: string;
+  publishedAfter?: string;
+  maxPages?: number;
 };
 
 export type FeedbackItem = {
@@ -20,6 +25,9 @@ export type FeedbackItem = {
   viewCount?: number | null;
   score?: number | null;
   commentCount?: number | null;
+  description?: string | null;
+  tags?: string[];
+  matchLevel?: string | null;
   labels?: string[];
 };
 
