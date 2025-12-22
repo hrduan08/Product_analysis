@@ -8,6 +8,7 @@ export type SearchParams = {
   regionCode?: string;
   order?: string;
   publishedAfter?: string;
+  publishedBefore?: string;
   maxPages?: number;
 };
 

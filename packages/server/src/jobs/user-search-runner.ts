@@ -45,8 +45,9 @@ const FEISHU_DATE_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
 const NUMBER_FORMATTER = new Intl.NumberFormat('zh-CN');
 const MAX_FEISHU_CARD_ITEMS = 5;
 const MAX_PUSH_ITEMS = 10;
-const MAX_RELEVANT_CANDIDATES = 25;
-const YOUTUBE_RECENT_DAYS = 30;
+const YOUTUBE_RECENT_DAYS = 7;
+const YOUTUBE_MID_DAYS_START = 7;
+const YOUTUBE_MID_DAYS_END = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<UserSearchJobResult> {
@@ -592,7 +593,7 @@ async function selectCandidates(params: {
   now: Date;
 }): Promise<CandidateSelection> {
   const startedAt = new Date();
-  const candidates: UserFeedbackWithItem[] = [];
+  const buckets: Record<'A' | 'B' | 'C', UserFeedbackWithItem[]> = { A: [], B: [], C: [] };
   const seenIds = new Set<string>();
   let successCount = 0;
   let failCount = 0;
@@ -609,89 +610,101 @@ async function selectCandidates(params: {
     for (const item of items) {
       if (item.last_notified_at) continue; // 已推送过
       if (seenIds.has(item.feedback.id)) continue;
-      candidates.push(item);
+      const priority = getMatchPriority((item.feedback.metadata as any)?.matchLevel);
+      if (priority > 5) continue; // 只保留相关 A–E
+      const published = item.feedback.published_at ?? item.feedback.first_seen_at ?? null;
+      const ageDays =
+        published != null ? Math.max(0, Math.floor((params.now.getTime() - published.getTime()) / DAY_MS)) : Number.MAX_SAFE_INTEGER;
+      if (ageDays <= YOUTUBE_RECENT_DAYS) {
+        buckets.A.push(item);
+      } else if (ageDays <= YOUTUBE_MID_DAYS_END) {
+        buckets.B.push(item);
+      } else {
+        buckets.C.push(item);
+      }
       seenIds.add(item.feedback.id);
     }
   };
 
-  // 第一轮：近 30 天，按相关性
-  const recentAfter = new Date(params.now.getTime() - YOUTUBE_RECENT_DAYS * DAY_MS).toISOString();
-  const firstResult = await runKeywordSync({
-    keywords: params.keywords,
-    platforms: params.platforms,
-    fetchLimit: cronConfig.fetchLimit,
-    logLabel: `${params.logLabel}[recent]`,
-    userId: params.userId,
-    relevanceLanguage: params.langRegion?.relevanceLanguage,
-    regionCode: params.langRegion?.regionCode,
-    order: 'relevance',
-    publishedAfter: recentAfter,
-    maxPages: 1
-  });
-  totalCreated += firstResult.created;
-  totalUpdated += firstResult.updated;
-  userCreated += firstResult.userCreated;
-  userUpdated += firstResult.userUpdated;
-  successCount += firstResult.stats.filter((item) => item.success).length;
-  failCount += firstResult.stats.filter((item) => !item.success).length;
-  finishedAt = firstResult.finishedAt;
-  await addCandidates(firstResult.userProcessedIds ?? []);
+  const windows: Array<{
+    label: 'recent' | 'mid' | 'old';
+    bucket: 'A' | 'B' | 'C';
+    publishedAfter?: string;
+    publishedBefore?: string;
+  }> = [
+    {
+      label: 'recent',
+      bucket: 'A',
+      publishedAfter: new Date(params.now.getTime() - YOUTUBE_RECENT_DAYS * DAY_MS).toISOString()
+    },
+    {
+      label: 'mid',
+      bucket: 'B',
+      publishedAfter: new Date(params.now.getTime() - YOUTUBE_MID_DAYS_END * DAY_MS).toISOString(),
+      publishedBefore: new Date(params.now.getTime() - YOUTUBE_MID_DAYS_START * DAY_MS).toISOString()
+    },
+    {
+      label: 'old',
+      bucket: 'C',
+      publishedBefore: new Date(params.now.getTime() - YOUTUBE_MID_DAYS_END * DAY_MS).toISOString()
+    }
+  ];
 
-  // 如不足 10，再补齐一轮相关性（不限日期）
-  if (candidates.length < MAX_PUSH_ITEMS) {
-    const supplementResult = await runKeywordSync({
+  for (const window of windows) {
+    if (buckets.A.length + buckets.B.length + buckets.C.length >= MAX_PUSH_ITEMS && window.bucket !== 'A') {
+      break;
+    }
+    const result = await runKeywordSync({
       keywords: params.keywords,
       platforms: params.platforms,
       fetchLimit: cronConfig.fetchLimit,
-      logLabel: `${params.logLabel}[relevance]`,
+      logLabel: `${params.logLabel}[${window.label}]`,
       userId: params.userId,
       relevanceLanguage: params.langRegion?.relevanceLanguage,
       regionCode: params.langRegion?.regionCode,
-      order: 'relevance',
+      order: 'date',
+      publishedAfter: window.publishedAfter,
+      publishedBefore: window.publishedBefore,
       maxPages: 1
     });
-    totalCreated += supplementResult.created;
-    totalUpdated += supplementResult.updated;
-    userCreated += supplementResult.userCreated;
-    userUpdated += supplementResult.userUpdated;
-    successCount += supplementResult.stats.filter((item) => item.success).length;
-    failCount += supplementResult.stats.filter((item) => !item.success).length;
-    finishedAt = supplementResult.finishedAt;
-    await addCandidates(supplementResult.userProcessedIds ?? []);
+    totalCreated += result.created;
+    totalUpdated += result.updated;
+    userCreated += result.userCreated;
+    userUpdated += result.userUpdated;
+    successCount += result.stats.filter((item) => item.success).length;
+    failCount += result.stats.filter((item) => !item.success).length;
+    finishedAt = result.finishedAt;
+    await addCandidates(result.userProcessedIds ?? []);
+    if (buckets.A.length + buckets.B.length + buckets.C.length >= MAX_PUSH_ITEMS) {
+      break;
+    }
   }
 
-  const relevantCandidates = candidates
-    .map((item) => ({
-      feedback: item.feedback,
-      priority: getMatchPriority((item.feedback.metadata as any)?.matchLevel)
-    }))
-    .filter((item) => item.priority > 0 && item.priority <= 5);
+  const sortBucket = (items: UserFeedbackWithItem[]): FeedbackEntity[] =>
+    [...items]
+      .map((item) => item.feedback)
+      .sort((a, b) => {
+        const viewDiff = (b.view_count ?? 0) - (a.view_count ?? 0);
+        if (viewDiff !== 0) return viewDiff;
+        const commentDiff = (b.comment_count ?? 0) - (a.comment_count ?? 0);
+        if (commentDiff !== 0) return commentDiff;
+        const dateA = a.published_at ? new Date(a.published_at).getTime() : 0;
+        const dateB = b.published_at ? new Date(b.published_at).getTime() : 0;
+        return dateB - dateA;
+      });
 
-  const sortedByRelevance = relevantCandidates.sort((a, b) => {
-    if (a.priority !== b.priority) return a.priority - b.priority;
-    const viewDiff = (b.feedback.view_count ?? 0) - (a.feedback.view_count ?? 0);
-    if (viewDiff !== 0) return viewDiff;
-    const commentDiff = (b.feedback.comment_count ?? 0) - (a.feedback.comment_count ?? 0);
-    if (commentDiff !== 0) return commentDiff;
-    const dateA = a.feedback.published_at ? new Date(a.feedback.published_at).getTime() : 0;
-    const dateB = b.feedback.published_at ? new Date(b.feedback.published_at).getTime() : 0;
-    return dateB - dateA;
-  });
+  const selectedItems: FeedbackEntity[] = [];
+  const orderBuckets: Array<'A' | 'B' | 'C'> = ['A', 'B', 'C'];
+  for (const bucket of orderBuckets) {
+    if (selectedItems.length >= MAX_PUSH_ITEMS) break;
+    const sorted = sortBucket(buckets[bucket]);
+    for (const item of sorted) {
+      if (selectedItems.length >= MAX_PUSH_ITEMS) break;
+      selectedItems.push(item);
+    }
+  }
 
-  const candidateCount = sortedByRelevance.length;
-  const candidatePool = sortedByRelevance.slice(0, MAX_RELEVANT_CANDIDATES).map((item) => item.feedback);
-
-  const selectedItems = [...candidatePool]
-    .sort((a, b) => {
-      const viewDiff = (b.view_count ?? 0) - (a.view_count ?? 0);
-      if (viewDiff !== 0) return viewDiff;
-      const commentDiff = (b.comment_count ?? 0) - (a.comment_count ?? 0);
-      if (commentDiff !== 0) return commentDiff;
-      const dateA = a.published_at ? new Date(a.published_at).getTime() : 0;
-      const dateB = b.published_at ? new Date(b.published_at).getTime() : 0;
-      return dateB - dateA;
-    })
-    .slice(0, MAX_PUSH_ITEMS);
+  const candidateCount = buckets.A.length + buckets.B.length + buckets.C.length;
 
   return {
     selectedItems,

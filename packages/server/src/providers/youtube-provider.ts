@@ -5,7 +5,17 @@ import { youtubeConfig } from '../config/youtube.js';
 const API_BASE = 'https://www.googleapis.com/youtube/v3';
 
 export class YoutubeProvider implements SearchProvider {
-  async search({ query, cursor, limit, relevanceLanguage, regionCode, order, publishedAfter, maxPages }: SearchParams): Promise<SearchResult> {
+  async search({
+    query,
+    cursor,
+    limit,
+    relevanceLanguage,
+    regionCode,
+    order,
+    publishedAfter,
+    publishedBefore,
+    maxPages
+  }: SearchParams): Promise<SearchResult> {
     const perPageLimit = Math.min(limit ?? youtubeConfig.maxResults, youtubeConfig.maxResults);
     const pages = Math.max(1, Math.min(maxPages ?? 1, 10));
     let pageToken = cursor ?? null;
@@ -29,6 +39,9 @@ export class YoutubeProvider implements SearchProvider {
       }
       if (publishedAfter) {
         searchParams.append('publishedAfter', publishedAfter);
+      }
+      if (publishedBefore) {
+        searchParams.append('publishedBefore', publishedBefore);
       }
       if (pageToken) {
         searchParams.append('pageToken', pageToken);

@@ -40,6 +40,7 @@ type KeywordSyncOptions = {
   regionCode?: string;
   order?: string;
   publishedAfter?: string;
+  publishedBefore?: string;
   maxPages?: number;
 };
 
@@ -53,6 +54,7 @@ export async function runKeywordSync(options?: KeywordSyncOptions): Promise<Keyw
   const regionCode = options?.regionCode;
   const order = options?.order;
   const publishedAfter = options?.publishedAfter;
+  const publishedBefore = options?.publishedBefore;
   const maxPages = options?.maxPages;
 
   const startedAt = new Date();
@@ -92,6 +94,7 @@ export async function runKeywordSync(options?: KeywordSyncOptions): Promise<Keyw
         regionCode,
         order,
         publishedAfter,
+        publishedBefore,
         maxPages
       );
       stats.push(stat);
@@ -138,6 +141,7 @@ async function processKeywordPlatform(
   regionCode?: string,
   order?: string,
   publishedAfter?: string,
+  publishedBefore?: string,
   maxPages?: number
 ): Promise<SyncStat> {
   try {
@@ -149,6 +153,7 @@ async function processKeywordPlatform(
       regionCode,
       order,
       publishedAfter,
+      publishedBefore,
       maxPages
     });
 
