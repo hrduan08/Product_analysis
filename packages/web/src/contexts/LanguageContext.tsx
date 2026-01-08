@@ -6,7 +6,7 @@ type LanguageContextValue = {
   lang: Lang;
   setLang: (lang: Lang) => void;
   toggleLang: () => void;
-  t: <T extends Record<string, any>>(dict: Record<Lang, T>) => T;
+  t: <T>(dict: Record<Lang, T>) => T;
 };
 
 const LanguageContext = createContext<LanguageContextValue | undefined>(undefined);
@@ -45,7 +45,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   }, [lang]);
 
   const value = useMemo(() => {
-    const t = <T extends Record<string, any>>(dict: Record<Lang, T>) => dict[lang];
+    const t = <T,>(dict: Record<Lang, T>): T => dict[lang];
     return { lang, setLang, toggleLang, t };
   }, [lang]);
 

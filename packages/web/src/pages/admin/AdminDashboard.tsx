@@ -309,6 +309,7 @@ export function AdminDashboard(): JSX.Element {
                       token={token}
                       onRefresh={() => setRefreshKey((count) => count + 1)}
                       onMessage={setMessage}
+                      lang={lang}
                     />
                   </td>
                 </tr>
@@ -447,9 +448,10 @@ type PaymentActionsProps = {
   token: string;
   onRefresh: () => void;
   onMessage: (message: string | null) => void;
+  lang: 'zh' | 'en';
 };
 
-function PaymentActions({ order, token, onRefresh, onMessage }: PaymentActionsProps): JSX.Element {
+function PaymentActions({ order, token, onRefresh, onMessage, lang }: PaymentActionsProps): JSX.Element {
   if (order.status !== 'pending') {
     return <span>--</span>;
   }

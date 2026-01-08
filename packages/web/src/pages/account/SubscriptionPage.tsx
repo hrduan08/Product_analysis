@@ -231,8 +231,8 @@ export function SubscriptionPage(): JSX.Element {
   const subscriptionStatusLabel = useMemo(() => {
     if (!subscription?.status) return null;
     const map = lang === 'zh'
-      ? { trialing: TEXT.trial, active: TEXT.active, past_due: TEXT.pastDue, canceled: TEXT.canceled }
-      : { trialing: TEXT.trial, active: TEXT.active, past_due: TEXT.pastDue, canceled: TEXT.canceled };
+      ? { trialing: TEXT.trial, active: TEXT.active, past_due: TEXT.pastDue, canceled: TEXT.canceled, expired: TEXT.pastDue }
+      : { trialing: TEXT.trial, active: TEXT.active, past_due: TEXT.pastDue, canceled: TEXT.canceled, expired: TEXT.pastDue };
     return map[subscription.status] ?? subscription.status;
   }, [TEXT.active, TEXT.canceled, TEXT.pastDue, TEXT.trial, lang, subscription?.status]);
 

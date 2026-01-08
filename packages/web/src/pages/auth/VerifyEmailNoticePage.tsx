@@ -8,7 +8,7 @@ import { resendVerificationEmail } from '../../services/auth';
 
 export function VerifyEmailNoticePage() {
   const { user } = useAuth();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState<string | null>(null);
 
@@ -51,7 +51,7 @@ export function VerifyEmailNoticePage() {
     setStatus('loading');
     setMessage(null);
     try {
-      await resendVerificationEmail({ email: user.email, lang: t({ zh: 'zh', en: 'en' }) });
+      await resendVerificationEmail({ email: user.email, lang });
       setStatus('success');
       setMessage(TEXT.success);
     } catch (error) {

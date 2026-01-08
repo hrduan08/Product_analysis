@@ -74,6 +74,8 @@ export function SearchPage() {
         subscription: '订阅状态',
         benefits: '权益：订阅后可解锁更多任务与通知渠道',
         benefitsPrefix: '权益：',
+        benefitsTasks: (n: number) => `${n} 个定时任务`,
+        benefitsNotify: (n: number) => `${n} 个通知渠道`,
         defaultExpired: '待设置',
         daily: '每日定时搜索和分析',
         keywords: '关键词：',
@@ -167,7 +169,7 @@ export function SearchPage() {
     }
   });
 
-  const NOTIFY_LABELS = TEXT.notifyLabels;
+  const NOTIFY_LABELS: Record<string, string> = TEXT.notifyLabels as Record<string, string>;
   const USER_STATUS_LABEL = TEXT.userStatus;
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {

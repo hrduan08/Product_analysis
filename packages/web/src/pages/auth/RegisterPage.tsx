@@ -17,7 +17,7 @@ type FormState = {
 export function RegisterPage() {
   const navigate = useNavigate();
   const { setSession } = useAuth();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const [form, setForm] = useState<FormState>({
     email: '',
     password: '',
@@ -96,7 +96,7 @@ export function RegisterPage() {
         email: form.email.trim(),
         password: form.password,
         nickname: form.nickname.trim() || undefined,
-        lang: t({ zh: 'zh', en: 'en' })
+        lang
       };
       const session = await register(payload);
       setSession(session);

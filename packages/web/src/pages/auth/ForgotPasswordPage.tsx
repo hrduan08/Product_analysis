@@ -6,7 +6,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { requestPasswordReset } from '../../services/auth';
 
 export function ForgotPasswordPage() {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -45,7 +45,7 @@ export function ForgotPasswordPage() {
     setSuccess(null);
     setLoading(true);
     try {
-      await requestPasswordReset({ email: email.trim(), lang: t({ zh: 'zh', en: 'en' }) });
+      await requestPasswordReset({ email: email.trim(), lang });
       setSuccess(TEXT.success);
     } catch (err) {
       setError(err instanceof Error ? err.message : TEXT.error);
