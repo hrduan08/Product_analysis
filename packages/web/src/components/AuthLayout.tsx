@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 type Props = {
   title: string;
@@ -8,6 +9,7 @@ type Props = {
 };
 
 export function AuthLayout({ title, subtitle, children, footer }: Props) {
+  useLanguage(); // ensure language context available for nested components
   return (
     <div className="auth-page">
       <div className="auth-card">

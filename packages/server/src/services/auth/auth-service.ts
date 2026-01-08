@@ -15,7 +15,8 @@ import { notifyOperations } from "../operations-notify.js";
 const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).max(64),
-  nickname: z.string().max(60).optional()
+  nickname: z.string().max(60).optional(),
+  lang: z.enum(["zh", "en"]).optional()
 });
 
 const loginSchema = z.object({
@@ -24,7 +25,8 @@ const loginSchema = z.object({
 });
 
 const emailSchema = z.object({
-  email: z.string().email()
+  email: z.string().email(),
+  lang: z.enum(["zh", "en"]).optional()
 });
 
 const resetConfirmSchema = z.object({
@@ -72,7 +74,7 @@ export async function registerUser(input: unknown) {
 
   const syncedUser = await syncUserLifecycle(user);
 
-  await sendVerificationEmail(syncedUser.id, syncedUser.email);
+  await sendVerificationEmail(syncedUser.id, syncedUser.email, payload.lang ?? "zh");
 
   const tokens = await issueTokens(syncedUser.id);
 
@@ -115,17 +117,17 @@ export async function resendVerificationEmail(input: unknown) {
   if (user.email_verified_at) {
     return;
   }
-  await sendVerificationEmail(user.id, user.email);
+  await sendVerificationEmail(user.id, user.email, payload.lang ?? "zh");
 }
 
-async function sendVerificationEmail(userId: string, email: string) {
+async function sendVerificationEmail(userId: string, email: string, lang: "zh" | "en" = "zh") {
   const expiresAt = addDays(new Date(), 1).getTime();
   const token = createSignedToken({
     userId,
     type: "email_verification",
     expiresAt
   });
-  const message = buildVerificationEmail(token);
+  const message = buildVerificationEmail(token, lang);
   await sendMail(
     {
       subject: message.subject,
@@ -166,7 +168,7 @@ export async function requestPasswordReset(input: unknown) {
     type: "password_reset",
     expiresAt
   });
-  const message = buildResetPasswordEmail(token);
+  const message = buildResetPasswordEmail(token, payload.lang ?? "zh");
   await sendMail(
     {
       subject: message.subject,

@@ -34,6 +34,7 @@ export type RegisterPayload = {
   email: string;
   password: string;
   nickname?: string;
+  lang?: 'zh' | 'en';
 };
 
 export type LoginPayload = {
@@ -43,6 +44,7 @@ export type LoginPayload = {
 
 export type EmailPayload = {
   email: string;
+  lang?: 'zh' | 'en';
 };
 
 export type ResetConfirmPayload = {

@@ -3,6 +3,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'; // 引入路由组件以配置页面导航。
 
 import { AuthProvider } from './contexts/AuthContext'; // 引入认证上下文提供者，管理全局登录状态。
+import { LanguageProvider } from './contexts/LanguageContext';
 import { LandingPage } from './pages/LandingPage'; // 引入首页组件。
 import { SearchPage } from './pages/SearchPage'; // 引入搜索控制台组件。
 import { TaskHistoryPage } from './pages/TaskHistoryPage';
@@ -23,27 +24,29 @@ import { FeedbackWidget } from './components/FeedbackWidget';
 
 export function App(): JSX.Element { // 定义并导出 App 根组件。
   return ( // 返回组件 JSX。
-    <AuthProvider> {/* 使用认证上下文包裹整个应用，提供登录状态 */}
-      <Routes> {/* 配置路由表 */}
-        <Route path="/" element={<LandingPage />} /> {/* SaaS 首页 */}
-        <Route path="/pricing" element={<PricingPage />} />
-        <Route path="/preview/payment" element={<PaymentPreviewPage />} />
-        <Route path="/preview/dashboard" element={<DashboardPreviewPage />} />
-        <Route path="/app" element={<SearchPage />} /> {/* 搜索控制台 */}
-        <Route path="/app/task-history" element={<TaskHistoryPage />} /> {/* 执行记录列表 */}
-        <Route path="/app/search-config" element={<SearchConfigPage />} /> {/* 搜索配置 */}
-        <Route path="/app/subscription" element={<SubscriptionPage />} /> {/* 订阅管理页面 */}
-        <Route path="/admin/manual-orders" element={<AdminManualOrdersPage />} /> {/* 待核实订单 */}
-        <Route path="/admin" element={<AdminDashboard />} /> {/* 后台仪表盘 */}
-        <Route path="/login" element={<LoginPage />} /> {/* 登录页面 */}
-        <Route path="/register" element={<RegisterPage />} /> {/* 注册页面 */}
-        <Route path="/verify-email" element={<VerifyEmailNoticePage />} /> {/* 验证提醒页面 */}
-        <Route path="/email/verify" element={<VerifyEmailCallbackPage />} /> {/* 邮箱验证回调 */}
-        <Route path="/password/forgot" element={<ForgotPasswordPage />} /> {/* 忘记密码页面 */}
-        <Route path="/password/reset" element={<ResetPasswordPage />} /> {/* 重置密码页面 */}
-        <Route path="*" element={<Navigate to="/" replace />} /> {/* 未匹配路由重定向至首页 */}
-      </Routes>
-      <FeedbackWidget />
-    </AuthProvider>
+    <LanguageProvider>
+      <AuthProvider> {/* 使用认证上下文包裹整个应用，提供登录状态 */}
+        <Routes> {/* 配置路由表 */}
+          <Route path="/" element={<LandingPage />} /> {/* SaaS 首页 */}
+          <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/preview/payment" element={<PaymentPreviewPage />} />
+          <Route path="/preview/dashboard" element={<DashboardPreviewPage />} />
+          <Route path="/app" element={<SearchPage />} /> {/* 搜索控制台 */}
+          <Route path="/app/task-history" element={<TaskHistoryPage />} /> {/* 执行记录列表 */}
+          <Route path="/app/search-config" element={<SearchConfigPage />} /> {/* 搜索配置 */}
+          <Route path="/app/subscription" element={<SubscriptionPage />} /> {/* 订阅管理页面 */}
+          <Route path="/admin/manual-orders" element={<AdminManualOrdersPage />} /> {/* 待核实订单 */}
+          <Route path="/admin" element={<AdminDashboard />} /> {/* 后台仪表盘 */}
+          <Route path="/login" element={<LoginPage />} /> {/* 登录页面 */}
+          <Route path="/register" element={<RegisterPage />} /> {/* 注册页面 */}
+          <Route path="/verify-email" element={<VerifyEmailNoticePage />} /> {/* 验证提醒页面 */}
+          <Route path="/email/verify" element={<VerifyEmailCallbackPage />} /> {/* 邮箱验证回调 */}
+          <Route path="/password/forgot" element={<ForgotPasswordPage />} /> {/* 忘记密码页面 */}
+          <Route path="/password/reset" element={<ResetPasswordPage />} /> {/* 重置密码页面 */}
+          <Route path="*" element={<Navigate to="/" replace />} /> {/* 未匹配路由重定向至首页 */}
+        </Routes>
+        <FeedbackWidget />
+      </AuthProvider>
+    </LanguageProvider>
   );
 } // 结束 App 组件定义。

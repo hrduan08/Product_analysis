@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 
 import { VideoList } from '../components/VideoList';
 import { Toast } from '../components/Toast';
@@ -11,6 +11,7 @@ import { fetchSearchConfig, type SearchConfig } from '../services/searchConfig';
 import { formatPlatformList } from '../utils/platform';
 import { searchFeedback } from '../services/api';
 import type { FeedbackItem, Platform } from '../types/feedback';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const SUPER_ADMINS = ['474226642@qq.com'];
@@ -20,20 +21,9 @@ const INSTANT_SEARCH_WHITELIST = ['474226642@qq.com', 'dhrstudy2008@126.com'];
 const INSTANT_PAGE_SIZE = 20;
 const INSTANT_FETCH_LIMIT = 50;
 
-const NOTIFY_LABELS: Record<string, string> = {
-  feishu: '飞书',
-  email: '邮件'
-};
-
-const USER_STATUS_LABEL: Record<string, string> = {
-  trialing: '试用中',
-  active: '已订阅',
-  past_due: '待续费',
-  canceled: '已取消'
-};
-
 export function SearchPage() {
   const { user, logout, updateUser } = useAuth();
+  const { t, lang, setLang } = useLanguage();
   const navigate = useNavigate();
   const [logoutLoading, setLogoutLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' } | null>(null);
@@ -41,6 +31,7 @@ export function SearchPage() {
   const [avatarTapCount, setAvatarTapCount] = useState(0);
   const tapTimerRef = useRef<number | null>(null);
   const adminUnlockedRef = useRef(false);
+  const avatarRef = useRef<HTMLDivElement | null>(null);
   const [adminModalOpen, setAdminModalOpen] = useState(false);
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [adminPasswordError, setAdminPasswordError] = useState<string | null>(null);
@@ -64,9 +55,120 @@ export function SearchPage() {
   const [taskRuns, setTaskRuns] = useState<TaskRun[]>([]);
   const [taskRunsLoading, setTaskRunsLoading] = useState(false);
   const [taskRunsError, setTaskRunsError] = useState<string | null>(null);
+  const [langOpen, setLangOpen] = useState(false);
   const canUseInstantSearch = Boolean(
     user?.email && INSTANT_SEARCH_WHITELIST.includes(user.email.toLowerCase())
   );
+
+  const TEXT = t({
+    zh: {
+      notifyLabels: { feishu: '飞书', email: '邮件' },
+      userStatus: { trialing: '试用中', active: '已订阅', past_due: '待续费', canceled: '已取消' },
+      nav: { language: '语言', zh: '中文', en: 'English', dashboard: '控制台' },
+      logout: { title: '退出登录', loggingOut: '退出中...', success: '已退出登录', fail: '退出失败，请稍后再试' },
+      banner: {
+        welcome: '欢迎回来，',
+        verify: '邮箱尚未验证，',
+        verifyLink: '前往验证',
+        verifySuffix: ' 后方可创建订阅。',
+        subscription: '订阅状态',
+        benefits: '权益：订阅后可解锁更多任务与通知渠道',
+        benefitsPrefix: '权益：',
+        defaultExpired: '待设置',
+        daily: '每日定时搜索和分析',
+        keywords: '关键词：',
+        slots: '定时搜索时间：',
+        notify: '消息通知方式：',
+        summaryBtnConfigured: '修改搜索配置',
+        summaryBtnEmpty: '配置搜索任务',
+        trialRemaining: (d: number, date: string) => `试用剩余 ${d} 天（${date} 到期）`,
+        trialExpired: (date: string) => `试用已到期（${date}）`,
+        expireLabelTrial: '试用到期：',
+        expireLabelNormal: '到期日：',
+        statusPending: '未登录',
+        statusPastDue: '会员已到期',
+        statusYearly: '已订阅年度会员',
+        statusMonthly: '已订阅月度会员'
+      },
+      instant: {
+        title: '即时搜索',
+        platformLabel: '平台',
+        keywordLabel: '搜索关键词',
+        placeholder: '例如：Helio Strap 最新评价',
+        searchBtn: '立即搜索',
+        searching: '搜索中...',
+        empty: '暂未检索到相关内容，换个关键词或平台试试。',
+        copied: '链接已复制',
+        copyFail: '复制失败，请手动复制',
+        fail: '搜索失败，请稍后重试',
+        summary: (kw: string, pf: string, total: number) => `关键词：${kw} · 平台：${pf} · 共 ${total} 条`,
+        prev: '上一页',
+        next: '下一页',
+        pageInfo: (p: number, total: number) => `第 ${p} / ${total} 页`,
+        historyTitle: '搜索记录',
+        historyAll: '查看全部任务',
+        table: { keywords: '关键词', platform: '平台', latest: '最近运行', new: '新增反馈', status: '状态', loading: '加载中...', empty: '暂无执行记录' }
+      },
+      toast: { loadPlanFail: '加载订阅信息失败' },
+      accountPopover: { title: '打开账号信息', status: '账户状态：', logout: '退出登录' }
+    },
+    en: {
+      notifyLabels: { feishu: 'Feishu', email: 'Email' },
+      userStatus: { trialing: 'Trial', active: 'Active', past_due: 'Past due', canceled: 'Canceled' },
+      nav: { language: 'Language', zh: 'Chinese', en: 'English', dashboard: 'Dashboard' },
+      logout: { title: 'Log out', loggingOut: 'Logging out...', success: 'Logged out', fail: 'Failed to log out, please try again' },
+      banner: {
+        welcome: 'Welcome back, ',
+        verify: 'Email not verified, ',
+        verifyLink: 'verify now',
+        verifySuffix: ' before creating a subscription.',
+        subscription: 'Subscription status',
+        benefits: 'Benefits: unlock more tasks and channels after subscribing',
+        benefitsPrefix: 'Benefits: ',
+        benefitsTasks: (n: number) => `${n} scheduled tasks`,
+        benefitsNotify: (n: number) => `${n} notification channels`,
+        defaultExpired: 'Not set',
+        daily: 'Daily scheduled search & analysis',
+        keywords: 'Keywords: ',
+        slots: 'Search time: ',
+        notify: 'Notify via: ',
+        summaryBtnConfigured: 'Edit search config',
+        summaryBtnEmpty: 'Set up search task',
+        trialRemaining: (d: number, date: string) => `Trial ends in ${d} days (${date})`,
+        trialExpired: (date: string) => `Trial expired (${date})`,
+        expireLabelTrial: 'Trial ends: ',
+        expireLabelNormal: 'Expires on: ',
+        statusPending: 'Not logged in',
+        statusPastDue: 'Membership expired',
+        statusYearly: 'Subscribed yearly',
+        statusMonthly: 'Subscribed monthly'
+      },
+      instant: {
+        title: 'Instant search',
+        platformLabel: 'Platform',
+        keywordLabel: 'Search keywords',
+        placeholder: 'e.g. Helio Strap latest reviews',
+        searchBtn: 'Search now',
+        searching: 'Searching...',
+        empty: 'No results found. Try other keywords or platforms.',
+        copied: 'Link copied',
+        copyFail: 'Copy failed, please copy manually',
+        fail: 'Search failed, please try again later',
+        summary: (kw: string, pf: string, total: number) => `Keywords: ${kw} · Platforms: ${pf} · Total ${total}`,
+        prev: 'Prev',
+        next: 'Next',
+        pageInfo: (p: number, total: number) => `Page ${p} / ${total}`,
+        historyTitle: 'Search history',
+        historyAll: 'View all tasks',
+        table: { keywords: 'Keywords', platform: 'Platform', latest: 'Last run', new: 'New feedback', status: 'Status', loading: 'Loading...', empty: 'No records yet' }
+      },
+      toast: { loadPlanFail: 'Failed to load subscription info' },
+      accountPopover: { title: 'Open account', status: 'Status: ', logout: 'Log out' }
+    }
+  });
+
+  const NOTIFY_LABELS = TEXT.notifyLabels;
+  const USER_STATUS_LABEL = TEXT.userStatus;
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -94,81 +196,83 @@ export function SearchPage() {
     return USER_STATUS_LABEL[user.status] ?? user.status;
   }, [user]);
 
-  const planCtaLabel = user?.status === 'trialing' || !user ? '立即订阅' : '续费';
+  const planCtaLabel =
+    user?.status === 'trialing' || !user ? (lang === 'zh' ? '立即订阅' : 'Subscribe now') : (lang === 'zh' ? '续费' : 'Renew');
   const bannerVariant = trialInfo?.variant ?? 'info';
   const showVerifyWarning = Boolean(user && !user.emailVerified);
 
   const subscriptionStatusText = useMemo(() => {
-    if (!user) return '未登录';
-    if (user.status === 'trialing') return '试用中';
-    if (user.status === 'past_due') return '会员已到期';
+    if (!user) return TEXT.banner.statusPending;
+    if (user.status === 'trialing') return USER_STATUS_LABEL.trialing;
+    if (user.status === 'past_due') return TEXT.banner.statusPastDue ?? USER_STATUS_LABEL.past_due;
     if (currentPlan?.billing_interval === 'yearly') {
-      return '已订阅年度会员';
+      return TEXT.banner.statusYearly ?? USER_STATUS_LABEL.active;
     }
     if (currentPlan?.billing_interval === 'monthly') {
-      return '已订阅月度会员';
+      return TEXT.banner.statusMonthly ?? USER_STATUS_LABEL.active;
     }
-    if (user.status === 'active') {
-      return '已订阅';
-    }
+    if (user.status === 'active') return USER_STATUS_LABEL.active;
     return USER_STATUS_LABEL[user.status] ?? user.status;
-  }, [user, currentPlan?.billing_interval]);
+  }, [TEXT.banner, USER_STATUS_LABEL, currentPlan?.billing_interval, user]);
 
   const expirationDate = user?.status === 'trialing' ? user?.trialEndsAt ?? null : planExpireAt;
-  const expirationLabel = expirationDate ? new Date(expirationDate).toLocaleDateString() : '待设置';
+  const expirationLabel = expirationDate ? new Date(expirationDate).toLocaleDateString() : TEXT.banner.defaultExpired;
 
   const subscriptionBenefitsText = useMemo(() => {
     const limits = (currentPlan?.limits as { keywords?: number; notifications?: string[] } | undefined) ?? undefined;
     if (limits?.keywords || limits?.notifications) {
       const notificationsCount = limits.notifications ? limits.notifications.length : undefined;
-      const parts = [];
+      const parts: string[] = [];
       if (limits.keywords) {
-        parts.push(`${limits.keywords} 个定时任务`);
+        parts.push(lang === 'zh' ? `${limits.keywords} 个定时任务` : TEXT.banner.benefitsTasks(limits.keywords));
       }
       if (notificationsCount) {
-        parts.push(`${notificationsCount} 个通知渠道`);
+        parts.push(lang === 'zh' ? `${notificationsCount} 个通知渠道` : TEXT.banner.benefitsNotify(notificationsCount));
       }
-      return `权益：${parts.join(' + ')}`;
+      const prefix = lang === 'zh' ? '权益：' : TEXT.banner.benefitsPrefix;
+      return `${prefix}${parts.join(' + ')}`;
     }
-    return '权益：订阅后可解锁更多任务与通知渠道';
-  }, [currentPlan?.limits]);
+    return lang === 'zh' ? '权益：订阅后可解锁更多任务与通知渠道' : TEXT.banner.benefits;
+  }, [TEXT.banner, currentPlan?.limits, lang]);
 
   const searchPlatformsText = searchConfigSummary
     ? formatPlatformList(searchConfigSummary.platforms)
     : searchConfigLoading
-    ? '加载中...'
-    : '尚未配置';
+    ? TEXT.instant.table.loading
+    : lang === 'zh' ? '尚未配置' : 'Not set yet';
 
   const searchKeywordsText =
     searchConfigSummary && searchConfigSummary.keywords.length > 0
-      ? searchConfigSummary.keywords.slice(0, 3).join('、')
-      : '未设置关键词';
+      ? searchConfigSummary.keywords.slice(0, 3).join(lang === 'zh' ? '、' : ', ')
+      : lang === 'zh' ? '未设置关键词' : 'Not set';
 
   const searchTimesText =
     searchConfigSummary && searchConfigSummary.slots.length > 0
-      ? searchConfigSummary.slots.join('、')
-      : '未设置时间';
+      ? searchConfigSummary.slots.join(lang === 'zh' ? '、' : ', ')
+      : lang === 'zh' ? '未设置时间' : 'Not set';
 
   const searchNotifyText =
     searchConfigSummary && searchConfigSummary.notifyChannels.length > 0
       ? searchConfigSummary.notifyChannels.map((channel) => NOTIFY_LABELS[channel] ?? channel).join(' + ')
-      : '未配置通知';
+      : lang === 'zh' ? '未配置通知' : 'Not set';
 
-  const searchSummaryButtonLabel = searchConfigSummary ? '修改搜索配置' : '配置搜索任务';
+  const searchSummaryButtonLabel = searchConfigSummary ? TEXT.banner.summaryBtnConfigured : TEXT.banner.summaryBtnEmpty;
   const searchSummaryLines = searchConfigLoading
-    ? ['加载中...']
+    ? [TEXT.instant.table.loading]
     : searchConfigError
     ? [searchConfigError]
     : [
-        `监控关键词：${searchKeywordsText}`,
-        `定时监控时间：${searchTimesText}`,
-        `结果通知方式：${searchNotifyText}`
+        `${TEXT.banner.keywords}${searchKeywordsText}`,
+        `${TEXT.banner.slots}${searchTimesText}`,
+        `${TEXT.banner.notify}${searchNotifyText}`
       ];
   const instantResultSummary =
     instantSearched && !instantLoading && instantResults.length > 0
-      ? `关键词：${instantKeywordsUsed.join('、')} · 平台：${instantPlatformsUsed
-          .map((platform) => (platform === 'youtube' ? 'YouTube' : 'Reddit'))
-          .join(' + ')} · 共 ${instantTotalCount ?? instantResults.length} 条`
+      ? TEXT.instant.summary(
+          instantKeywordsUsed.join(lang === 'zh' ? '、' : ', '),
+          instantPlatformsUsed.map((platform) => (platform === 'youtube' ? 'YouTube' : 'Reddit')).join(' + '),
+          instantTotalCount ?? instantResults.length
+        )
       : null;
   const showInstantEmptyState = instantSearched && !instantLoading && instantResults.length === 0 && !instantError;
   const instantTotalPages = instantResults.length > 0 ? Math.ceil(instantResults.length / INSTANT_PAGE_SIZE) : 0;
@@ -177,6 +281,10 @@ export function SearchPage() {
     const start = (instantPage - 1) * INSTANT_PAGE_SIZE;
     return instantResults.slice(start, start + INSTANT_PAGE_SIZE);
   }, [instantResults, instantPage]);
+
+  if (!user) {
+    return <Navigate to="/" replace />;
+  }
 
   useEffect(() => {
     if (instantTotalPages > 0 && instantPage > instantTotalPages) {
@@ -205,7 +313,7 @@ export function SearchPage() {
         }
       })
       .catch((error) => {
-        setPlanError(error instanceof Error ? error.message : '加载订阅信息失败');
+        setPlanError(error instanceof Error ? error.message : TEXT.toast.loadPlanFail);
       })
       .finally(() => setPlanLoading(false));
   }, [updateUser, user]);
@@ -255,7 +363,7 @@ export function SearchPage() {
       })
       .catch((error) => {
         if (!cancelled) {
-          const message = error instanceof Error ? error.message : '加载任务记录失败';
+          const message = error instanceof Error ? error.message : (lang === 'zh' ? '加载任务记录失败' : 'Failed to load records');
           setTaskRunsError(message);
         }
       })
@@ -269,6 +377,16 @@ export function SearchPage() {
       cancelled = true;
     };
   }, [user?.id]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (avatarRef.current && !avatarRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleSecretTap = () => {
     if (!user || !SUPER_ADMINS.includes((user.email ?? '').toLowerCase())) {
@@ -337,14 +455,14 @@ export function SearchPage() {
     const trimmed = instantQuery.trim();
     setInstantSearched(false);
     if (!trimmed) {
-      setInstantError('请输入要搜索的关键词');
+      setInstantError(lang === 'zh' ? '请输入要搜索的关键词' : 'Please enter keywords to search');
       setInstantResults([]);
       setInstantTotalCount(null);
       setInstantKeywordsUsed([]);
       return;
     }
     if (instantPlatforms.length === 0) {
-      setInstantError('请至少选择一个平台');
+      setInstantError(lang === 'zh' ? '请至少选择一个平台' : 'Select at least one platform');
       setInstantResults([]);
       setInstantTotalCount(null);
       setInstantKeywordsUsed([]);
@@ -359,7 +477,7 @@ export function SearchPage() {
       )
     );
     if (keywords.length === 0) {
-      setInstantError('请输入有效的关键词');
+      setInstantError(lang === 'zh' ? '请输入有效的关键词' : 'Please enter valid keywords');
       setInstantResults([]);
       setInstantTotalCount(null);
       setInstantKeywordsUsed([]);
@@ -393,7 +511,7 @@ export function SearchPage() {
       setInstantPage(1);
       setInstantSearched(true);
     } catch (error) {
-      const message = error instanceof Error ? error.message : '搜索失败，请稍后重试';
+      const message = error instanceof Error ? error.message : TEXT.instant.fail;
       setInstantError(message);
       setInstantResults([]);
       setInstantTotalCount(null);
@@ -406,9 +524,9 @@ export function SearchPage() {
   const handleInstantCopyLink = async (url: string) => {
     try {
       await navigator.clipboard.writeText(url);
-      showToast('链接已复制');
+      showToast(TEXT.instant.copied);
     } catch {
-      showToast('复制失败，请手动复制', 'error');
+      showToast(TEXT.instant.copyFail, 'error');
     }
   };
 
@@ -416,12 +534,14 @@ export function SearchPage() {
     setLogoutLoading(true);
     try {
       await logout();
-      showToast('已退出登录');
+      showToast(TEXT.logout.success);
+      navigate('/');
     } catch {
-      showToast('退出失败，请稍后再试', 'error');
+      showToast(TEXT.logout.fail, 'error');
     } finally {
       setLogoutLoading(false);
       setMenuOpen(false);
+      setLangOpen(false);
     }
   };
 
@@ -429,31 +549,63 @@ export function SearchPage() {
     <div className="dashboard">
       <header className="dashboard-nav">
         <Link className="logo-mark" to="/">
-          <span>PI</span>Product Insight
+          <img src="/assets/logos/logo.png" alt="VoiceInsight" className="logo-img" />
+          <span className="logo-word">
+            Voice<span className="logo-word__accent">Insight</span>
+          </span>
         </Link>
-        <div className="dashboard-nav__actions">
-          <button type="button" className="btn text">
-            中文 ▾
-          </button>
+        <div className="dashboard-nav__actions" ref={avatarRef}>
+          <div className="nav-lang">
+            <button type="button" className="btn text" onClick={() => setLangOpen((v) => !v)}>
+              {TEXT.nav.language}
+            </button>
+            {langOpen ? (
+              <div className="nav-lang__menu">
+                <button
+                  type="button"
+                  className={`nav-lang__item${lang === 'zh' ? ' is-active' : ''}`}
+                  onClick={() => {
+                    setLang('zh');
+                    setLangOpen(false);
+                  }}
+                >
+                  {TEXT.nav.zh}
+                </button>
+                <button
+                  type="button"
+                  className={`nav-lang__item${lang === 'en' ? ' is-active' : ''}`}
+                  onClick={() => {
+                    setLang('en');
+                    setLangOpen(false);
+                  }}
+                >
+                  {TEXT.nav.en}
+                </button>
+              </div>
+            ) : null}
+          </div>
           <button
             type="button"
             className="dashboard-avatar"
             onClick={handleAvatarClick}
-            aria-label="打开账号信息"
+            aria-label={TEXT.accountPopover.title}
           >
             {(user?.email?.[0] ?? 'U').toUpperCase()}
           </button>
           {menuOpen ? (
             <div className="account-popover account-popover--dashboard">
               <div className="account-popover__header">
-                <strong>{user?.email ?? '未登录'}</strong>
+                <strong>{user?.email ?? TEXT.banner.statusPending}</strong>
               </div>
               {accountStatusLabel ? (
-                <p className="account-popover__status">账户状态：{accountStatusLabel}</p>
+                <p className="account-popover__status">
+                  {TEXT.accountPopover.status}
+                  {accountStatusLabel}
+                </p>
               ) : null}
               {trialInfo ? <p className="account-popover__status">{trialInfo.message}</p> : null}
               <button type="button" className="btn secondary" onClick={handleLogout} disabled={logoutLoading}>
-                {logoutLoading ? '退出中...' : '退出登录'}
+                {logoutLoading ? TEXT.logout.loggingOut : TEXT.logout.title}
               </button>
             </div>
           ) : null}
@@ -465,22 +617,30 @@ export function SearchPage() {
           <div className="account-banner__header">
             <div className="account-banner__identity">
               <div>
-                <h2>欢迎回来，{user?.profile?.nickname ?? '成员'}</h2>
+                <h2>
+                  {TEXT.banner.welcome}
+                  {user?.profile?.nickname ?? (lang === 'zh' ? '成员' : 'Member')}
+                </h2>
               </div>
             </div>
             {showVerifyWarning ? (
               <div className="account-banner__warning">
-                邮箱尚未验证，<Link to="/verify-email">前往验证</Link> 后方可创建订阅。
+                {TEXT.banner.verify}
+                <Link to="/verify-email">{TEXT.banner.verifyLink}</Link>
+                {TEXT.banner.verifySuffix}
               </div>
             ) : null}
           </div>
           <div className="account-banner__summary">
             <div className="account-banner__summary-item account-banner__summary-item--subscription">
-              <span className="account-banner__summary-label">订阅状态</span>
+              <span className="account-banner__summary-label">{TEXT.banner.subscription}</span>
               <strong className="account-banner__summary-value">{subscriptionStatusText}</strong>
               <p className="account-banner__summary-meta">{subscriptionBenefitsText}</p>
               <div className="account-banner__meta-line">
-                <span>{user?.status === 'trialing' ? '试用到期：' : '到期日：'}{expirationLabel}</span>
+                <span>
+                  {user?.status === 'trialing' ? TEXT.banner.expireLabelTrial : TEXT.banner.expireLabelNormal}
+                  {expirationLabel}
+                </span>
                 <Link to="/app/subscription" className="account-banner__summary-button">
                   {planCtaLabel}
                 </Link>
@@ -488,12 +648,21 @@ export function SearchPage() {
               {planError ? <p className="account-banner__summary-meta">{planError}</p> : null}
             </div>
             <div className="account-banner__summary-item">
-              <span className="account-banner__summary-label">搜索配置摘要</span>
+              <span className="account-banner__summary-label">{TEXT.banner.daily}</span>
               <strong className="account-banner__summary-value">{searchPlatformsText}</strong>
               <div className="account-banner__summary-meta account-banner__summary-meta--stack">
-                {searchSummaryLines.map((line, index) => (
-                  <span key={index}>{line}</span>
-                ))}
+                <span>
+                  {TEXT.banner.keywords}
+                  {searchKeywordsText}
+                </span>
+                <span>
+                  {TEXT.banner.slots}
+                  {searchTimesText}
+                </span>
+                <span>
+                  {TEXT.banner.notify}
+                  {searchNotifyText}
+                </span>
               </div>
               <Link to="/app/search-config" className="account-banner__summary-link">
                 {searchSummaryButtonLabel}
@@ -506,7 +675,7 @@ export function SearchPage() {
           {canUseInstantSearch ? (
             <article className="dashboard-card dashboard-card--wide">
               <div className="dashboard-card__header">
-                <h3>即时搜索</h3>
+                <h3>{TEXT.instant.title}</h3>
                 {instantResultSummary ? (
                   <span className="account-banner__summary-meta">{instantResultSummary}</span>
                 ) : null}
@@ -514,7 +683,7 @@ export function SearchPage() {
               <form className="instant-search-form" onSubmit={handleInstantSearch}>
                 <div className="instant-search-row">
                   <div className="instant-search-form__group instant-search-form__group--platforms">
-                    <span className="instant-search-form__label">平台</span>
+                    <span className="instant-search-form__label">{TEXT.instant.platformLabel}</span>
                     <div className="instant-search-platforms">
                       {(['youtube', 'reddit'] as Platform[]).map((platform) => (
                         <label key={platform} className="instant-search-platforms__option">
@@ -531,24 +700,24 @@ export function SearchPage() {
                 </div>
                 <div className="instant-search-row instant-search-row--keywords">
                   <div className="instant-search-form__group instant-search-form__group--grow">
-                    <span className="instant-search-form__label">搜索关键词</span>
+                    <span className="instant-search-form__label">{TEXT.instant.keywordLabel}</span>
                     <input
                       type="text"
                       value={instantQuery}
                       onChange={(event) => setInstantQuery(event.target.value)}
-                      placeholder="例如：Helio Strap 最新评价"
+                      placeholder={TEXT.instant.placeholder}
                     />
                   </div>
                   <div className="instant-search-form__actions">
                     <button type="submit" className="btn primary" disabled={instantLoading}>
-                      {instantLoading ? '搜索中...' : '立即搜索'}
+                      {instantLoading ? TEXT.instant.searching : TEXT.instant.searchBtn}
                     </button>
                   </div>
                 </div>
               </form>
               {instantError ? <div className="subscription-error">{instantError}</div> : null}
               {showInstantEmptyState ? (
-                <p className="task-table__empty">暂未检索到相关内容，换个关键词或平台试试。</p>
+                <p className="task-table__empty">{TEXT.instant.empty}</p>
               ) : null}
               <VideoList items={pagedInstantResults} onCopyLink={handleInstantCopyLink} />
               {instantTotalPages > 1 ? (
@@ -559,10 +728,10 @@ export function SearchPage() {
                     disabled={instantPage <= 1}
                     onClick={() => setInstantPage((page) => Math.max(1, page - 1))}
                   >
-                    上一页
+                    {TEXT.instant.prev}
                   </button>
                   <span className="instant-search-pagination__info">
-                    第 {instantPage} / {instantTotalPages} 页
+                    {TEXT.instant.pageInfo(instantPage, instantTotalPages)}
                   </span>
                   <button
                     type="button"
@@ -570,7 +739,7 @@ export function SearchPage() {
                     disabled={instantPage >= instantTotalPages}
                     onClick={() => setInstantPage((page) => Math.min(instantTotalPages, page + 1))}
                   >
-                    下一页
+                    {TEXT.instant.next}
                   </button>
                 </div>
               ) : null}
@@ -578,24 +747,24 @@ export function SearchPage() {
           ) : null}
           <article className="dashboard-card dashboard-card--wide">
             <div className="dashboard-card__header">
-              <h3>定时任务执行记录</h3>
-              <Link to="/app/task-history">查看全部任务</Link>
+              <h3>{TEXT.instant.historyTitle}</h3>
+              <Link to="/app/task-history">{TEXT.instant.historyAll}</Link>
             </div>
             <table className="task-table">
               <thead>
                 <tr>
-                  <th>关键词</th>
-                  <th>平台</th>
-                  <th>最近运行</th>
-                  <th>新增反馈</th>
-                  <th>状态</th>
+                  <th>{TEXT.instant.table.keywords}</th>
+                  <th>{TEXT.instant.table.platform}</th>
+                  <th>{TEXT.instant.table.latest}</th>
+                  <th>{TEXT.instant.table.new}</th>
+                  <th>{TEXT.instant.table.status}</th>
                 </tr>
               </thead>
               <tbody>
                 {taskRunsLoading ? (
                   <tr>
                     <td colSpan={5} className="task-table__empty">
-                      加载中...
+                      {TEXT.instant.table.loading}
                     </td>
                   </tr>
                 ) : taskRunsError ? (
@@ -607,20 +776,24 @@ export function SearchPage() {
                 ) : taskRuns.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="task-table__empty">
-                      暂无执行记录
+                      {TEXT.instant.table.empty}
                     </td>
                   </tr>
                 ) : (
                   taskRuns.map((run) => {
                     const statusClass = run.status === 'success' ? 'ok' : 'warning';
                     const statusLabel =
-                      run.status === 'success' ? '完成' : run.status === 'partial' ? '部分成功' : '失败';
+                      run.status === 'success'
+                        ? (lang === 'zh' ? '完成' : 'Success')
+                        : run.status === 'partial'
+                        ? (lang === 'zh' ? '部分成功' : 'Partial')
+                        : (lang === 'zh' ? '失败' : 'Failed');
                     return (
                       <tr key={run.id}>
-                        <td>{run.keywords.length ? run.keywords.join('、') : '未设置'}</td>
+                        <td>{run.keywords.length ? run.keywords.join(lang === 'zh' ? '、' : ', ') : (lang === 'zh' ? '未设置' : 'Not set')}</td>
                         <td>{formatPlatformList(run.platforms)}</td>
-                        <td>{formatRunTime(run.runAt)}</td>
-                        <td>{run.newItems} 条</td>
+                        <td>{formatRunTime(run.runAt, lang as 'zh' | 'en')}</td>
+                        <td>{lang === 'zh' ? `${run.newItems} 条` : `${run.newItems}`}</td>
                         <td>
                           <span className={`task-status task-status--${statusClass}`}>{statusLabel}</span>
                         </td>

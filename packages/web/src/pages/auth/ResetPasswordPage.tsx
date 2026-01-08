@@ -2,9 +2,11 @@ import { useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { AuthLayout } from '../../components/AuthLayout';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { confirmPasswordReset } from '../../services/auth';
 
 export function ResetPasswordPage() {
+  const { t } = useLanguage();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
 
@@ -14,14 +16,57 @@ export function ResetPasswordPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const TEXT = t({
+    zh: {
+      title: '重置密码',
+      invalidSubtitle: '链接无效或已过期，请重新申请',
+      invalidTip: '重置链接缺失或已失效，请返回忘记密码页面重新获取。',
+      invalidAction: '重新申请重置邮件',
+      setTitle: '设置新密码',
+      setSubtitle: '请输入新密码并确认后提交',
+      footerTip: '重置完成后？',
+      footerLink: '返回登录',
+      newPwd: '新密码',
+      confirmPwd: '确认新密码',
+      placeholderPwd: '至少 8 位，建议包含字母与数字',
+      placeholderConfirm: '再次输入新密码',
+      submit: '确认重置',
+      submitting: '提交中...',
+      errorLength: '密码至少 8 位长度',
+      errorMismatch: '两次密码输入不一致',
+      success: '密码重置成功，请使用新密码登录。',
+      fail: '重置失败，请稍后重试'
+    },
+    en: {
+      title: 'Reset password',
+      invalidSubtitle: 'Link is invalid or expired. Please request again.',
+      invalidTip: 'Reset link is missing or expired. Go back to request a new one.',
+      invalidAction: 'Request reset email again',
+      setTitle: 'Set a new password',
+      setSubtitle: 'Enter and confirm your new password',
+      footerTip: 'After reset?',
+      footerLink: 'Back to login',
+      newPwd: 'New password',
+      confirmPwd: 'Confirm new password',
+      placeholderPwd: 'At least 8 characters, include letters and numbers',
+      placeholderConfirm: 'Re-enter new password',
+      submit: 'Confirm reset',
+      submitting: 'Submitting...',
+      errorLength: 'Password must be at least 8 characters',
+      errorMismatch: 'Passwords do not match',
+      success: 'Password reset successfully. Please log in with the new password.',
+      fail: 'Reset failed, please try again later'
+    }
+  });
+
   if (!token) {
     return (
-      <AuthLayout title="重置密码" subtitle="链接无效或已过期，请重新申请">
+      <AuthLayout title={TEXT.title} subtitle={TEXT.invalidSubtitle}>
         <div className="auth-notice">
-          <p>重置链接缺失或已失效，请返回忘记密码页面重新获取。</p>
+          <p>{TEXT.invalidTip}</p>
           <div className="auth-notice__actions">
             <Link to="/password/forgot" className="auth-form__submit auth-form__submit--link">
-              重新申请重置邮件
+              {TEXT.invalidAction}
             </Link>
           </div>
         </div>
@@ -35,22 +80,22 @@ export function ResetPasswordPage() {
     setSuccess(null);
 
     if (password.length < 8) {
-      setError('密码至少 8 位长度');
+      setError(TEXT.errorLength);
       return;
     }
     if (password !== confirmPassword) {
-      setError('两次密码输入不一致');
+      setError(TEXT.errorMismatch);
       return;
     }
 
     setLoading(true);
     try {
       await confirmPasswordReset({ token, password });
-      setSuccess('密码重置成功，请使用新密码登录。');
+      setSuccess(TEXT.success);
       setPassword('');
       setConfirmPassword('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : '重置失败，请稍后重试');
+      setError(err instanceof Error ? err.message : TEXT.fail);
     } finally {
       setLoading(false);
     }
@@ -58,12 +103,12 @@ export function ResetPasswordPage() {
 
   return (
     <AuthLayout
-      title="设置新密码"
-      subtitle="请输入新密码并确认后提交"
+      title={TEXT.setTitle}
+      subtitle={TEXT.setSubtitle}
       footer={
         <div className="auth-form__footer">
-          <span>重置完成后？</span>
-          <Link to="/login">返回登录</Link>
+          <span>{TEXT.footerTip}</span>
+          <Link to="/login">{TEXT.footerLink}</Link>
         </div>
       }
     >
@@ -71,29 +116,29 @@ export function ResetPasswordPage() {
         {error ? <div className="auth-form__error">{error}</div> : null}
         {success ? <div className="auth-form__success">{success}</div> : null}
         <label className="auth-form__field">
-          <span>新密码</span>
+          <span>{TEXT.newPwd}</span>
           <input
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="至少 8 位，建议包含字母与数字"
+            placeholder={TEXT.placeholderPwd}
             autoComplete="new-password"
             required
           />
         </label>
         <label className="auth-form__field">
-          <span>确认新密码</span>
+          <span>{TEXT.confirmPwd}</span>
           <input
             type="password"
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}
-            placeholder="再次输入新密码"
+            placeholder={TEXT.placeholderConfirm}
             autoComplete="new-password"
             required
           />
         </label>
         <button type="submit" className="auth-form__submit" disabled={loading}>
-          {loading ? '提交中...' : '确认重置'}
+          {loading ? TEXT.submitting : TEXT.submit}
         </button>
       </form>
     </AuthLayout>

@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 
 import { Toast } from '../../components/Toast';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import {
   fetchSearchConfig,
   patchSearchConfig,
@@ -52,6 +53,7 @@ const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_TOKEN ?? '';
 
 export function SearchConfigPage(): JSX.Element {
   const { user, setSession, logout } = useAuth();
+  const { lang, setLang, t } = useLanguage();
   const navigate = useNavigate();
   const [config, setConfig] = useState<SearchConfig | null>(null);
   const [meta, setMeta] = useState<SearchConfigMeta | null>(null);
@@ -72,6 +74,122 @@ export function SearchConfigPage(): JSX.Element {
   const [adminModalOpen, setAdminModalOpen] = useState(false);
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [adminPasswordError, setAdminPasswordError] = useState<string | null>(null);
+  const avatarRef = useRef<HTMLDivElement | null>(null);
+  const [langOpen, setLangOpen] = useState(false);
+
+  const NAV_TEXT = t({
+    zh: { language: '语言', zh: '中文', en: 'English', logout: '退出登录', loggingOut: '退出中...', status: '账户状态：', open: '打开账号信息' },
+    en: { language: 'Language', zh: 'Chinese', en: 'English', logout: 'Log out', loggingOut: 'Logging out...', status: 'Status: ', open: 'Open account' }
+  });
+
+  const TEXT = t({
+    zh: {
+      title: '每日搜索和分析',
+      subtitle: '系统将根据你设置的关键词，每日定时搜索并分析社媒平台中的热门用户源声。',
+      loading: '页面加载中...',
+      searchPlatform: '社媒平台',
+      searchPlatformDesc: '你想分析哪个社媒平台的用户源声？',
+      keywords: '关键词',
+      keywordsDesc: '请输入你所关注的产品、话题等关键词，系统将据此搜索用户源声',
+      addKeyword: '添加关键词',
+      keywordPlaceholder: '例如：Apple Vision Pro、Helio Strap',
+      dailyTime: '每日定时搜索时间',
+      dailyTimeDesc: '你最希望每天哪个时间点更新搜索和分析结果？',
+      addTime: '添加时间',
+      timePlaceholder: '例如：09:00',
+      notify: '消息通知',
+      notifyDesc: '你希望通过哪种方式来通知搜索和分析结果？',
+      notifyEmail: '邮件通知',
+      notifyEmailPlaceholder: 'name@example.com',
+      notifyFeishu: '飞书通知',
+      feishuSteps: '飞书机器人Webhook设置步骤：',
+      feishuStep1: '第一步：创建飞书群聊',
+      feishuStep2: '第二步：在群聊页面右上角点击“...”，选择【设置】进入设置页面',
+      feishuStep3: '第三步：在设置页面选择【群机器人】，再依次点击【添加机器人】>【自定义机器人】，然后设置好机器人名称、描述，最后点击【添加】即可',
+      feishuStep4: '第四步：复制页面上显示的“Webhook地址”，添加到以下输入框并保存',
+      feishuNotice: '注意：保存 Webhook地址后，请点击【测试飞书通知】，并在飞书中确认能收到测试消息。',
+      feishuPlaceholder: 'https://open.feishu.cn/open-apis/bot/v2/hook/...',
+      btnSave: '保存',
+      btnTestFeishu: '测试飞书通知',
+      toastSaved: '配置已保存',
+      toastUpdateFail: '更新配置失败',
+      toastLoadFail: '加载配置失败，请稍后重试',
+      toastSessionExpired: '会话已失效，请重新登录',
+      toastPlatformPending: 'Reddit平台还在适配开发中，敬请期待！',
+      toastNeedPlatform: '至少选择一个平台',
+      toastNeedKeyword: '请输入要添加的关键词',
+      toastKeywordMax: (n: number) => `最多只能添加 ${n} 个关键词`,
+      toastKeywordExist: '关键词已存在',
+      toastNeedTime: '请选择时间',
+      toastTimeFormat: '时间格式必须为 HH:mm',
+      toastTimeMax: (n: number) => `每天最多设置 ${n} 个时间`,
+      toastTimeExist: '该时间已存在',
+      toastNeedWebhook: '请先填写并保存 Webhook',
+      toastFeishuTestOk: '飞书测试通知已发送',
+      toastFeishuTestFail: '飞书测试通知发送失败，请稍后重试',
+      toastNeedEmail: '邮箱不能为空',
+      toastEmailInvalid: '邮箱格式不正确',
+      toastNeedNotifyChannel: '至少保留一个通知方式',
+      keywordsLabel: '关键词列表',
+      slotsLabel: '定时搜索时间',
+      notifyLabel: '通知方式',
+      summaryLoaded: '加载完成',
+      labelFeishuStatus: '飞书状态：'
+    },
+    en: {
+      title: 'Daily search & analysis',
+      subtitle: 'We search and analyze hot social feedback daily based on your keywords.',
+      loading: 'Loading...',
+      searchPlatform: 'Social platforms',
+      searchPlatformDesc: 'Which platforms do you want to analyze?',
+      keywords: 'Keywords',
+      keywordsDesc: 'Enter the product/topic keywords you care about; we will search by them',
+      addKeyword: 'Add keyword',
+      keywordPlaceholder: 'e.g. Apple Vision Pro, Helio Strap',
+      dailyTime: 'Daily scheduled time',
+      dailyTimeDesc: 'At what time do you want daily results?',
+      addTime: 'Add time',
+      timePlaceholder: 'e.g. 09:00',
+      notify: 'Notifications',
+      notifyDesc: 'How should we deliver the search & analysis results to you?',
+      notifyEmail: 'Email',
+      notifyEmailPlaceholder: 'name@example.com',
+      notifyFeishu: 'Feishu',
+      feishuSteps: 'Feishu webhook setup:',
+      feishuStep1: '1) Create a Feishu group chat',
+      feishuStep2: '2) In group settings (… on top right) go to Settings',
+      feishuStep3: '3) Choose Group bots > Add bot > Custom bot, set name & description, click Add',
+      feishuStep4: '4) Copy the “Webhook URL” and paste below, then save',
+      feishuNotice: 'Note: after saving the webhook, click “Test Feishu notification” and check the group.',
+      feishuPlaceholder: 'https://open.feishu.cn/open-apis/bot/v2/hook/...',
+      btnSave: 'Save',
+      btnTestFeishu: 'Test Feishu notification',
+      toastSaved: 'Saved',
+      toastUpdateFail: 'Update failed',
+      toastLoadFail: 'Failed to load config, please try again',
+      toastSessionExpired: 'Session expired, please log in again',
+      toastPlatformPending: 'Reddit integration is coming soon.',
+      toastNeedPlatform: 'Select at least one platform',
+      toastNeedKeyword: 'Please enter a keyword',
+      toastKeywordMax: (n: number) => `You can add up to ${n} keywords`,
+      toastKeywordExist: 'Keyword already exists',
+      toastNeedTime: 'Please pick a time',
+      toastTimeFormat: 'Time must be HH:mm',
+      toastTimeMax: (n: number) => `You can set up to ${n} times per day`,
+      toastTimeExist: 'This time already exists',
+      toastNeedWebhook: 'Please save the Webhook first',
+      toastFeishuTestOk: 'Test notification sent to Feishu',
+      toastFeishuTestFail: 'Failed to send Feishu test notification',
+      toastNeedEmail: 'Email cannot be empty',
+      toastEmailInvalid: 'Invalid email',
+      toastNeedNotifyChannel: 'Keep at least one notification channel',
+      keywordsLabel: 'Keywords',
+      slotsLabel: 'Scheduled times',
+      notifyLabel: 'Notification channels',
+      summaryLoaded: 'Loaded',
+      labelFeishuStatus: 'Feishu status:'
+    }
+  });
 
   useEffect(() => {
     return () => {
@@ -97,9 +215,9 @@ export function SearchConfigPage(): JSX.Element {
         setFeishuDraft(response.config.feishuWebhook ?? '');
       } catch (error) {
         if (!cancelled) {
-          const message = error instanceof Error ? error.message : '加载配置失败，请稍后重试';
+          const message = error instanceof Error ? error.message : TEXT.toastLoadFail;
           if (/重新登录/.test(message) || /未登录/.test(message) || /401/.test(message)) {
-            showToast('会话已失效，请重新登录', 'error');
+            showToast(TEXT.toastSessionExpired, 'error');
             setSession(null);
             setConfig(null);
             setMeta(null);
@@ -126,7 +244,7 @@ export function SearchConfigPage(): JSX.Element {
 
   const nextRunDisplay = useMemo(() => {
     if (!config?.nextRunAt) {
-      return '尚未排程';
+      return lang === 'zh' ? '尚未排程' : 'Not scheduled';
     }
     try {
       const date = new Date(config.nextRunAt);
@@ -136,14 +254,25 @@ export function SearchConfigPage(): JSX.Element {
     }
   }, [config?.nextRunAt]);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (avatarRef.current && !avatarRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
 
   const accountStatusLabel = useMemo(() => {
     if (!user) return null;
-    return USER_STATUS_LABEL[user.status] ?? user.status;
-  }, [user]);
+    const map = lang === 'zh' ? USER_STATUS_LABEL : { trialing: 'Trial', active: 'Active', past_due: 'Past due', canceled: 'Canceled' };
+    return map[user.status] ?? user.status;
+  }, [lang, user]);
 
   const trialInfo = useMemo(() => {
     if (!user || user.status !== 'trialing' || !user.trialEndsAt) return null as null;
@@ -152,10 +281,14 @@ export function SearchConfigPage(): JSX.Element {
     const diffDays = Math.ceil((endsAt.getTime() - Date.now()) / ONE_DAY_MS);
     const message =
       diffDays > 0
-        ? `试用剩余 ${diffDays} 天（${endsAt.toLocaleDateString()} 到期）`
-        : `试用已到期（${endsAt.toLocaleDateString()}）`;
+        ? (lang === 'zh'
+            ? `试用剩余 ${diffDays} 天（${endsAt.toLocaleDateString()} 到期）`
+            : `Trial ends in ${diffDays} days (${endsAt.toLocaleDateString()})`)
+        : (lang === 'zh'
+            ? `试用已到期（${endsAt.toLocaleDateString()}）`
+            : `Trial expired (${endsAt.toLocaleDateString()})`);
     return { message };
-  }, [user?.trialEndsAt]);
+  }, [lang, user?.trialEndsAt]);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -183,12 +316,12 @@ export function SearchConfigPage(): JSX.Element {
       if ('feishuWebhook' in requestPayload) {
         setFeishuDraft(updated.feishuWebhook ?? '');
       }
-      showToast('配置已保存');
+      showToast(TEXT.toastSaved);
     } catch (error) {
       setConfig(previous);
       setEmailDraft(previous.notifyEmail);
       setFeishuDraft(previous.feishuWebhook ?? '');
-      showToast(error instanceof Error ? error.message : '更新配置失败', 'error');
+      showToast(error instanceof Error ? error.message : TEXT.toastUpdateFail, 'error');
     } finally {
       setSaving(false);
     }
@@ -198,11 +331,15 @@ export function SearchConfigPage(): JSX.Element {
 
   const handlePlatformToggle = async (platform: string) => {
     if (!config) return;
+    if (platform === 'reddit') {
+      showToast(TEXT.toastPlatformPending);
+      return;
+    }
     const current = new Set(config.platforms);
     if (current.has(platform)) {
       current.delete(platform);
       if (current.size === 0) {
-        showToast('至少选择一个平台', 'error');
+        showToast(TEXT.toastNeedPlatform, 'error');
         return;
       }
     } else {
@@ -217,16 +354,16 @@ export function SearchConfigPage(): JSX.Element {
     if (!config) return;
     const value = keywordInput.trim();
     if (!value) {
-      showToast('请输入要添加的关键词', 'error');
+      showToast(TEXT.toastNeedKeyword, 'error');
       return;
     }
     if (config.keywords.length >= maxKeywords) {
-      showToast(`最多只能添加 ${maxKeywords} 个关键词`, 'error');
+      showToast(TEXT.toastKeywordMax(maxKeywords), 'error');
       return;
     }
     const exists = config.keywords.some((item) => item.toLowerCase() === value.toLowerCase());
     if (exists) {
-      showToast('关键词已存在', 'error');
+      showToast(TEXT.toastKeywordExist, 'error');
       return;
     }
     const next = [...config.keywords, value];
@@ -245,19 +382,19 @@ export function SearchConfigPage(): JSX.Element {
     if (!config) return;
     const value = timeInput.trim();
     if (!value) {
-      showToast('请选择时间', 'error');
+      showToast(TEXT.toastNeedTime, 'error');
       return;
     }
     if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(value)) {
-      showToast('时间格式必须为 HH:mm', 'error');
+      showToast(TEXT.toastTimeFormat, 'error');
       return;
     }
     if (config.slots.length >= maxSlots) {
-      showToast(`每天最多设置 ${maxSlots} 个时间`, 'error');
+      showToast(TEXT.toastTimeMax(maxSlots), 'error');
       return;
     }
     if (config.slots.includes(value)) {
-      showToast('该时间已存在', 'error');
+      showToast(TEXT.toastTimeExist, 'error');
       return;
     }
     const next = sortSlots([...config.slots, value]);
@@ -276,7 +413,7 @@ export function SearchConfigPage(): JSX.Element {
     const current = new Set(config.notifyChannels);
     if (current.has(channel)) {
       if (current.size === 1) {
-        showToast('至少保留一个通知方式', 'error');
+        showToast(TEXT.toastNeedNotifyChannel, 'error');
         return;
       }
       current.delete(channel);
@@ -297,7 +434,7 @@ export function SearchConfigPage(): JSX.Element {
   const handleFeishuTest = async () => {
     if (!config || !user) return;
     if (!config.feishuWebhook) {
-      showToast('请先填写并保存 Webhook', 'error');
+      showToast(TEXT.toastNeedWebhook, 'error');
       return;
     }
     setTestingFeishu(true);
@@ -312,9 +449,9 @@ export function SearchConfigPage(): JSX.Element {
             }
           : previous
       );
-      showToast('飞书测试通知已发送', 'success');
+      showToast(TEXT.toastFeishuTestOk, 'success');
     } catch (error) {
-      const message = error instanceof Error ? error.message : '飞书测试通知发送失败，请稍后重试';
+      const message = error instanceof Error ? error.message : TEXT.toastFeishuTestFail;
       showToast(message, 'error');
       setConfig((previous) =>
         previous
@@ -334,7 +471,7 @@ export function SearchConfigPage(): JSX.Element {
     if (!config) return;
     const value = emailDraft.trim();
     if (!value) {
-      showToast('邮箱不能为空', 'error');
+      showToast(TEXT.toastNeedEmail, 'error');
       setEmailDraft(config.notifyEmail);
       return;
     }
@@ -348,9 +485,10 @@ export function SearchConfigPage(): JSX.Element {
     setLogoutLoading(true);
     try {
       await logout();
-      showToast('已退出登录');
+      showToast(lang === 'zh' ? '已退出登录' : 'Logged out');
+      navigate('/');
     } catch {
-      showToast('退出失败，请稍后再试', 'error');
+      showToast(lang === 'zh' ? '退出失败，请稍后再试' : 'Failed to log out', 'error');
     } finally {
       setLogoutLoading(false);
       setMenuOpen(false);
@@ -413,18 +551,47 @@ export function SearchConfigPage(): JSX.Element {
   const AccountNav = (
     <header className="dashboard-nav">
       <Link className="logo-mark" to="/">
-        <span>PI</span>Product Insight
+        <img src="/assets/logos/logo.png" alt="VoiceInsight" className="logo-img" />
+        <span className="logo-word">
+          Voice<span className="logo-word__accent">Insight</span>
+        </span>
       </Link>
-      <div className="dashboard-nav__actions">
-        <button type="button" className="btn text">
-          中文 ▾
-        </button>
+      <div className="dashboard-nav__actions" ref={avatarRef}>
+        <div className="nav-lang">
+          <button type="button" className="btn text" onClick={() => setLangOpen((v) => !v)}>
+            {NAV_TEXT.language}
+          </button>
+          {langOpen ? (
+            <div className="nav-lang__menu">
+              <button
+                type="button"
+                className={`nav-lang__item${lang === 'zh' ? ' is-active' : ''}`}
+                onClick={() => {
+                  setLang('zh');
+                  setLangOpen(false);
+                }}
+              >
+                {NAV_TEXT.zh}
+              </button>
+              <button
+                type="button"
+                className={`nav-lang__item${lang === 'en' ? ' is-active' : ''}`}
+                onClick={() => {
+                  setLang('en');
+                  setLangOpen(false);
+                }}
+              >
+                {NAV_TEXT.en}
+              </button>
+            </div>
+          ) : null}
+        </div>
         <div className="nav-avatar-wrapper">
           <button
             type="button"
             className="dashboard-avatar"
             onClick={handleAvatarClick}
-            aria-label="打开账号信息"
+            aria-label={NAV_TEXT.open}
           >
             {(user.email?.[0] ?? 'U').toUpperCase()}
           </button>
@@ -434,11 +601,14 @@ export function SearchConfigPage(): JSX.Element {
                 <strong>{user.email}</strong>
               </div>
               {accountStatusLabel ? (
-                <p className="account-popover__status">账户状态：{accountStatusLabel}</p>
+                <p className="account-popover__status">
+                  {NAV_TEXT.status}
+                  {accountStatusLabel}
+                </p>
               ) : null}
               {trialInfo ? <p className="account-popover__status">{trialInfo.message}</p> : null}
               <button type="button" className="btn secondary" onClick={() => void handleLogout()} disabled={logoutLoading}>
-                {logoutLoading ? '退出中...' : '退出登录'}
+                {logoutLoading ? NAV_TEXT.loggingOut : NAV_TEXT.logout}
               </button>
             </div>
           ) : null}
@@ -454,8 +624,8 @@ export function SearchConfigPage(): JSX.Element {
         <div className="dashboard-shell config-page">
           <header className="config-header">
             <div>
-              <h1>配置搜索任务</h1>
-              <p>加载中，请稍候…</p>
+              <h1>{TEXT.loading}</h1>
+              <p>{TEXT.loading}</p>
             </div>
           </header>
         </div>
@@ -470,11 +640,11 @@ export function SearchConfigPage(): JSX.Element {
         <div className="dashboard-shell config-page">
           <header className="config-header">
             <div>
-              <h1>配置搜索任务</h1>
-              <p>暂时无法获取配置，请稍后刷新尝试。</p>
+              <h1>{TEXT.title}</h1>
+              <p>{TEXT.toastLoadFail}</p>
             </div>
             <Link to="/app" className="config-link">
-              返回控制台
+              {lang === 'zh' ? '返回控制台' : 'Back to dashboard'}
             </Link>
           </header>
         </div>
@@ -485,10 +655,14 @@ export function SearchConfigPage(): JSX.Element {
   const feishuEnabled = config.notifyChannels.includes('feishu');
   const emailEnabled = config.notifyChannels.includes('email');
   const feishuStatusLabel =
-    config.feishuStatus === 'ok' ? '可用' : config.feishuStatus === 'failed' ? '测试失败' : '待测试';
+    config.feishuStatus === 'ok'
+      ? lang === 'zh' ? '可用' : 'OK'
+      : config.feishuStatus === 'failed'
+      ? lang === 'zh' ? '测试失败' : 'Failed'
+      : lang === 'zh' ? '待测试' : 'Not tested';
   const feishuLastTestDisplay = config.feishuLastTestedAt
     ? new Date(config.feishuLastTestedAt).toLocaleString()
-    : '尚未测试';
+    : lang === 'zh' ? '尚未测试' : 'Not tested';
   const feishuWebhookDirty =
     feishuDraft.trim() !== (config?.feishuWebhook ? config.feishuWebhook.trim() : '');
 
@@ -499,17 +673,17 @@ export function SearchConfigPage(): JSX.Element {
       <div className="dashboard-shell config-page">
         <header className="config-header">
           <div>
-            <h1>配置搜索任务</h1>
-            <p>配置你想定时搜索的关键词、定时搜索时间、搜索结果通知方式。</p>
+            <h1>{TEXT.title}</h1>
+            <p>{TEXT.subtitle}</p>
           </div>
           <Link to="/app" className="config-link">
-            返回控制台
+            {lang === 'zh' ? '返回控制台' : 'Back to dashboard'}
           </Link>
         </header>
 
         <section className="config-section">
-          <h3>1. 选择搜索平台</h3>
-          <p className="config-section__hint">选择定时搜索的平台，至少选择一个平台。</p>
+          <h3>{lang === 'zh' ? '1. 选择社媒平台' : '1. Choose platforms'}</h3>
+          <p className="config-section__hint">{TEXT.searchPlatformDesc}</p>
           <div className="platform-toggle">
             {PLATFORM_OPTIONS.map((option) => (
               <button
@@ -524,15 +698,20 @@ export function SearchConfigPage(): JSX.Element {
             ))}
           </div>
           {(config.platforms.includes('x') || config.platforms.includes('facebook')) && (
-            <p className="config-tip">X 与 Facebook 将在后续版本接入，无需重复操作。</p>
+            <p className="config-tip">
+              {lang === 'zh' ? 'X 与 Facebook 将在后续版本接入，无需重复操作。' : 'X and Facebook will be supported later.'}
+            </p>
           )}
         </section>
 
         <section className="config-section">
           <div className="config-section__header">
-            <h3>2. 监控关键词</h3>
-            <span className="config-section__hint">最多 {maxKeywords} 个</span>
+            <h3>{lang === 'zh' ? '2. 关键词' : '2. Keywords'}</h3>
+            <span className="config-section__hint">
+              {lang === 'zh' ? `最多 ${maxKeywords} 个` : `Up to ${maxKeywords}`}
+            </span>
           </div>
+          <p className="config-section__hint">{TEXT.keywordsDesc}</p>
           <div className="config-chip-list">
             {config.keywords.map((keyword) => (
               <span key={keyword} className="config-chip">
@@ -542,33 +721,36 @@ export function SearchConfigPage(): JSX.Element {
                   className="config-chip__remove"
                   onClick={() => void handleRemoveKeyword(keyword)}
                   disabled={saving}
-                  aria-label={`删除关键词 ${keyword}`}
+                  aria-label={(lang === 'zh' ? '删除关键词 ' : 'Remove keyword ') + keyword}
                 >
                   ×
                 </button>
               </span>
             ))}
-            {config.keywords.length === 0 && <span className="config-empty">暂无关键词</span>}
+            {config.keywords.length === 0 && <span className="config-empty">{lang === 'zh' ? '暂无关键词' : 'No keywords yet'}</span>}
           </div>
           <form className="config-inline-form" onSubmit={(event) => void handleAddKeyword(event)}>
             <input
               type="text"
               value={keywordInput}
               onChange={(event) => setKeywordInput(event.target.value)}
-              placeholder="例如：Apple Vision Pro"
+              placeholder={TEXT.keywordPlaceholder}
               disabled={saving}
             />
             <button type="submit" disabled={saving || config.keywords.length >= maxKeywords}>
-              添加关键词
+              {TEXT.addKeyword}
             </button>
           </form>
         </section>
 
         <section className="config-section">
           <div className="config-section__header">
-            <h3>3. 每日定时监控时间</h3>
-            <span className="config-section__hint">最多 {maxSlots} 个时间点</span>
+            <h3>{lang === 'zh' ? '3. 每日定时搜索时间' : '3. Scheduled time'}</h3>
+            <span className="config-section__hint">
+              {lang === 'zh' ? `最多 ${maxSlots} 个时间点` : `Up to ${maxSlots} times`}
+            </span>
           </div>
+          <p className="config-section__hint">{TEXT.dailyTimeDesc}</p>
           <div className="config-chip-list">
             {config.slots.map((slot) => (
               <span key={slot} className="config-chip">
@@ -578,13 +760,13 @@ export function SearchConfigPage(): JSX.Element {
                   className="config-chip__remove"
                   onClick={() => void handleRemoveSlot(slot)}
                   disabled={saving}
-                  aria-label={`删除时间 ${slot}`}
+                  aria-label={(lang === 'zh' ? '删除时间 ' : 'Remove time ') + slot}
                 >
                   ×
                 </button>
               </span>
             ))}
-            {config.slots.length === 0 && <span className="config-empty">尚未设置执行时间</span>}
+            {config.slots.length === 0 && <span className="config-empty">{lang === 'zh' ? '尚未设置执行时间' : 'No times set'}</span>}
           </div>
           <form className="config-inline-form" onSubmit={(event) => void handleAddSlot(event)}>
             <input
@@ -602,14 +784,14 @@ export function SearchConfigPage(): JSX.Element {
               disabled={saving}
             />
             <button type="submit" disabled={saving || config.slots.length >= maxSlots}>
-              添加时间
+              {TEXT.addTime}
             </button>
           </form>
         </section>
 
         <section className="config-section">
-          <h3>4. 通知方式</h3>
-          <p className="config-section__hint">默认开启飞书提醒，可与邮件通知同时启用。</p>
+          <h3>{lang === 'zh' ? '4. 消息通知' : '4. Notifications'}</h3>
+          <p className="config-section__hint">{TEXT.notifyDesc}</p>
           <div className="platform-toggle">
             {CHANNEL_ORDER.map((channel) => (
               <button
@@ -619,48 +801,59 @@ export function SearchConfigPage(): JSX.Element {
                 onClick={() => void handleChannelToggle(channel)}
                 disabled={saving}
               >
-                {CHANNEL_LABEL[channel]}
+                {channel === 'email' ? TEXT.notifyEmail : TEXT.notifyFeishu}
               </button>
             ))}
           </div>
           {feishuEnabled && (
             <>
               <p className="config-section__hint">
-                飞书机器人 Webhook（飞书群聊 &gt; 添加机器人 &gt; 自定义机器人 &gt; 复制 Webhook）
+                {TEXT.feishuSteps}
+                <br />
+                {TEXT.feishuStep1}
+                <br />
+                {TEXT.feishuStep2}
+                <br />
+                {TEXT.feishuStep3}
+                <br />
+                {TEXT.feishuStep4}
               </p>
-              <p className="config-section__hint">
-                填写完成后请先点击「测试飞书通知」，到飞书群里确认能收到消息再继续。
+              <p className="config-section__hint config-section__hint--tight">
+                {TEXT.feishuNotice}
               </p>
               <div className="config-inline-form">
                 <input
                   type="url"
                   value={feishuDraft}
                   onChange={(event) => setFeishuDraft(event.target.value)}
-                  placeholder="请输入飞书机器人的 Webhook 地址..."
+                  placeholder={TEXT.feishuPlaceholder}
                   disabled={saving}
                 />
                 <button type="button" onClick={() => void handleFeishuSubmit()} disabled={saving || !feishuWebhookDirty}>
-                  保存 Webhook
+                  {TEXT.btnSave}
                 </button>
                 <button type="button" onClick={() => void handleFeishuTest()} disabled={saving || testingFeishu || !config.feishuWebhook}>
-                  {testingFeishu ? '测试中…' : '测试飞书通知'}
+                  {testingFeishu ? (lang === 'zh' ? '测试中…' : 'Testing...') : TEXT.btnTestFeishu}
                 </button>
               </div>
               <p className="config-section__hint">
-                状态：{feishuStatusLabel} · {feishuLastTestDisplay}
+                {TEXT.labelFeishuStatus}
+                {feishuStatusLabel} · {feishuLastTestDisplay}
               </p>
             </>
           )}
           {emailEnabled && (
             <>
-              <p className="config-section__hint">邮件通知将发送到以下邮箱，可修改为其他地址。</p>
+              <p className="config-section__hint">
+                {lang === 'zh' ? '邮件通知将发送到以下邮箱，可修改为其他地址。' : 'Email notifications will be sent to the address below.'}
+              </p>
               <div className="config-inline-form config-inline-form--single">
                 <input
                   type="email"
                   value={emailDraft}
                   onChange={(event) => setEmailDraft(event.target.value)}
                   onBlur={() => void handleEmailSubmit()}
-                  placeholder="name@example.com"
+                  placeholder={TEXT.notifyEmailPlaceholder}
                   disabled={saving}
                 />
                 <button
@@ -668,7 +861,7 @@ export function SearchConfigPage(): JSX.Element {
                   onClick={() => void handleEmailSubmit()}
                   disabled={saving || emailDraft.trim() === config.notifyEmail.trim()}
                 >
-                  保存邮箱
+                  {TEXT.btnSave}
                 </button>
               </div>
             </>
@@ -685,22 +878,22 @@ export function SearchConfigPage(): JSX.Element {
       {adminModalOpen ? (
         <div className="admin-password-modal">
           <form className="admin-password-card" onSubmit={handleAdminPasswordSubmit}>
-            <h3>输入管理员密码</h3>
-            <p className="plan-meta">完成验证后将进入管理平台。</p>
+              <h3>{lang === 'zh' ? '输入管理员密码' : 'Enter admin password'}</h3>
+              <p className="plan-meta">{lang === 'zh' ? '完成验证后将进入管理平台。' : 'After verification you will enter admin console.'}</p>
             <input
               type="password"
               value={adminPasswordInput}
               onChange={(event) => setAdminPasswordInput(event.target.value)}
-              placeholder="管理员密码"
+              placeholder={lang === 'zh' ? '管理员密码' : 'Admin password'}
               autoFocus
             />
             {adminPasswordError ? <div className="subscription-error">{adminPasswordError}</div> : null}
             <div className="admin-password-card__actions">
               <button type="button" className="btn secondary" onClick={() => setAdminModalOpen(false)}>
-                取消
+                {lang === 'zh' ? '取消' : 'Cancel'}
               </button>
               <button type="submit" className="btn primary">
-                确定
+                {lang === 'zh' ? '确定' : 'Confirm'}
               </button>
             </div>
           </form>

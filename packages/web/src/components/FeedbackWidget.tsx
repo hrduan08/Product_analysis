@@ -2,6 +2,7 @@ import type { FormEvent, ChangeEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { submitFeedback, uploadFeedbackAttachment } from '../services/feedback';
 
 type FormState = {
@@ -23,9 +24,9 @@ type AttachmentPayload = {
 type DiagnosticsPayload = Record<string, unknown>;
 
 const CATEGORY_OPTIONS: Array<{ value: FormState['category']; label: string }> = [
-  { value: 'bug', label: '遇到的问题' },
-  { value: 'idea', label: '功能建议' },
-  { value: 'other', label: '其他' }
+  { value: 'bug', label: 'bug' },
+  { value: 'idea', label: 'idea' },
+  { value: 'other', label: 'other' }
 ];
 
 const ANON_KEY = 'pi_anon_id';
@@ -36,6 +37,69 @@ const MIN_DESCRIPTION_LENGTH = 10;
 
 export function FeedbackWidget(): JSX.Element {
   const { user } = useAuth();
+  const { t, lang } = useLanguage();
+  const TEXT = t({
+    zh: {
+      open: '反馈',
+      title: '提交反馈',
+      subtitle: '请描述您的问题或建议，系统会自动携带诊断信息，帮助我们快速定位。',
+      close: '关闭反馈面板',
+      success: '感谢反馈！我们已收到您的信息。',
+      successMail: (email: string) => `如需补充可发送邮件至 ${email}`,
+      closeBtn: '关闭',
+      type: '反馈类型',
+      typeOptions: { bug: '遇到的问题', idea: '功能建议', other: '其他' },
+      titleLabel: '标题（可选）',
+      titlePlaceholder: '例如：登录搜索配置页时提示 500 错误',
+      descLabel: '详细描述',
+      descPlaceholder: '请说明出现问题的操作步骤、期望结果、实际结果等信息',
+      contactLabel: '联系邮箱（可选）',
+      contactPlaceholder: '用于我们向您确认细节',
+      attachments: (max: number) => `截图（最多 ${max} 张，可选）`,
+      uploadHint: '支持 png / jpg，单张 ≤ 5MB',
+      upload: '上传',
+      uploadIng: '上传中…',
+      remove: '移除附件',
+      diagSummary: '诊断信息将自动上传（点击查看）',
+      cancel: '取消',
+      submit: '提交反馈',
+      submitting: '提交中…',
+      submitFail: '提交失败，请稍后重试',
+      fileTypeError: '仅支持上传图片文件',
+      fileSizeError: '单个附件不能超过 5MB',
+      uploadFail: '上传截图失败，请稍后重试'
+    },
+    en: {
+      open: 'Feedback',
+      title: 'Send feedback',
+      subtitle: 'Describe your issue or idea; diagnostics will be attached to help us debug.',
+      close: 'Close feedback panel',
+      success: 'Thanks! We have received your feedback.',
+      successMail: (email: string) => `If needed, email us at ${email}`,
+      closeBtn: 'Close',
+      type: 'Type',
+      typeOptions: { bug: 'Issue', idea: 'Feature request', other: 'Other' },
+      titleLabel: 'Title (optional)',
+      titlePlaceholder: 'e.g. 500 error on search config page',
+      descLabel: 'Description',
+      descPlaceholder: 'Describe steps, expected result, actual result, etc.',
+      contactLabel: 'Contact email (optional)',
+      contactPlaceholder: 'For us to follow up with you',
+      attachments: (max: number) => `Screenshots (up to ${max}, optional)`,
+      uploadHint: 'PNG/JPG, up to 5MB each',
+      upload: 'Upload',
+      uploadIng: 'Uploading…',
+      remove: 'Remove attachment',
+      diagSummary: 'Diagnostics will be uploaded (click to view)',
+      cancel: 'Cancel',
+      submit: 'Submit',
+      submitting: 'Submitting…',
+      submitFail: 'Submission failed, please try again later',
+      fileTypeError: 'Only image files are supported',
+      fileSizeError: 'Each file must be ≤ 5MB',
+      uploadFail: 'Failed to upload screenshot'
+    }
+  });
   const [isOpen, setIsOpen] = useState(false);
   const [form, setForm] = useState<FormState>({
     category: 'bug',
@@ -88,7 +152,7 @@ export function FeedbackWidget(): JSX.Element {
         attachments: []
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : '提交失败，请稍后重试';
+      const message = err instanceof Error ? err.message : TEXT.submitFail;
       setError(message);
       setStatus('error');
     }
@@ -106,11 +170,11 @@ export function FeedbackWidget(): JSX.Element {
     try {
       for (const file of picked) {
         if (!file.type.startsWith('image/')) {
-          setError('仅支持上传图片文件');
+          setError(TEXT.fileTypeError);
           continue;
         }
         if (file.size > MAX_FILE_SIZE) {
-          setError('单个附件不能超过 5MB');
+          setError(TEXT.fileSizeError);
           continue;
         }
         const uploaded = await uploadFeedbackAttachment(file);
@@ -130,7 +194,7 @@ export function FeedbackWidget(): JSX.Element {
       }
       setError(null);
     } catch (uploadError) {
-      const message = uploadError instanceof Error ? uploadError.message : '上传截图失败，请稍后重试';
+      const message = uploadError instanceof Error ? uploadError.message : TEXT.uploadFail;
       setError(message);
     } finally {
       setIsUploading(false);
@@ -160,35 +224,57 @@ export function FeedbackWidget(): JSX.Element {
         type="button"
         className="feedback-widget__button"
         onClick={() => setIsOpen(true)}
-        aria-label="提交反馈"
+        aria-label={TEXT.open}
       >
-        提交反馈
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+        >
+          <path
+            d="M5 5h14a2 2 0 012 2v6a2 2 0 01-2 2h-5l-3.5 3-1-3H5a2 2 0 01-2-2V7a2 2 0 012-2Z"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M8 10.5h8M8 8h8M8 13h4"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
       </button>
       {isOpen ? (
         <div className="feedback-widget__overlay" role="dialog" aria-modal="true">
           <div className="feedback-widget__panel">
             <div className="feedback-widget__panel-header">
               <div>
-                <h3>提交反馈</h3>
-                <p>请描述您的问题或建议，系统会自动携带诊断信息，帮助我们快速定位。</p>
+                <h3>{TEXT.title}</h3>
+                <p>{TEXT.subtitle}</p>
               </div>
-              <button type="button" className="feedback-widget__close" onClick={closePanel} aria-label="关闭反馈面板">
+              <button type="button" className="feedback-widget__close" onClick={closePanel} aria-label={TEXT.close}>
                 ×
               </button>
             </div>
 
             {status === 'success' ? (
               <div className="feedback-widget__status feedback-widget__status--success">
-                <p>感谢反馈！我们已收到您的信息。</p>
-                <p>如需补充可发送邮件至 {SUPPORT_EMAIL}</p>
+                <p>{TEXT.success}</p>
+                <p>{TEXT.successMail(SUPPORT_EMAIL)}</p>
                 <button type="button" onClick={closePanel}>
-                  关闭
+                  {TEXT.closeBtn}
                 </button>
               </div>
             ) : (
               <form className="feedback-widget__form" onSubmit={handleSubmit}>
                 <div className="feedback-widget__field">
-                  <label htmlFor="feedback-category">反馈类型</label>
+                  <label htmlFor="feedback-category">{TEXT.type}</label>
                   <select
                     id="feedback-category"
                     value={form.category}
@@ -198,58 +284,58 @@ export function FeedbackWidget(): JSX.Element {
                   >
                     {CATEGORY_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
-                        {option.label}
+                        {TEXT.typeOptions[option.value]}
                       </option>
                     ))}
                   </select>
                 </div>
 
                 <div className="feedback-widget__field">
-                  <label htmlFor="feedback-title">标题（可选）</label>
+                  <label htmlFor="feedback-title">{TEXT.titleLabel}</label>
                   <input
                     id="feedback-title"
                     type="text"
                     value={form.title}
                     maxLength={120}
-                    placeholder="例如：登录搜索配置页时提示 500 错误"
+                    placeholder={TEXT.titlePlaceholder}
                     onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))}
                   />
                 </div>
 
                 <div className="feedback-widget__field">
-                  <label htmlFor="feedback-description">详细描述</label>
+                  <label htmlFor="feedback-description">{TEXT.descLabel}</label>
                   <textarea
                     id="feedback-description"
                     value={form.description}
                     minLength={MIN_DESCRIPTION_LENGTH}
                     maxLength={3000}
-                    placeholder="请说明出现问题的操作步骤、期望结果、实际结果等信息"
+                    placeholder={TEXT.descPlaceholder}
                     onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
                     required
                   />
                 </div>
 
                 <div className="feedback-widget__field">
-                  <label htmlFor="feedback-contact">联系邮箱（可选）</label>
+                  <label htmlFor="feedback-contact">{TEXT.contactLabel}</label>
                   <input
                     id="feedback-contact"
                     type="email"
                     value={form.contactEmail}
-                    placeholder="用于我们向您确认细节"
+                    placeholder={TEXT.contactPlaceholder}
                     onChange={(event) => setForm((prev) => ({ ...prev, contactEmail: event.target.value }))}
                   />
                 </div>
 
                 <div className="feedback-widget__attachments">
                   <div className="feedback-widget__attachments-header">
-                    <label>截图（最多 {MAX_ATTACHMENTS} 张，可选）</label>
-                    <span>{isUploading ? '上传中…' : '支持 png / jpg，单张 ≤ 5MB'}</span>
+                    <label>{TEXT.attachments(MAX_ATTACHMENTS)}</label>
+                    <span>{isUploading ? TEXT.uploadIng : TEXT.uploadHint}</span>
                   </div>
                   <div className="feedback-widget__attachments-grid">
                     {form.attachments.map((file, index) => (
                       <div className="feedback-widget__attachment" key={file.previewUrl}>
                         <img src={file.previewUrl} alt={file.name} />
-                        <button type="button" onClick={() => removeAttachment(index)} aria-label="移除附件">
+                        <button type="button" onClick={() => removeAttachment(index)} aria-label={TEXT.remove}>
                           ×
                         </button>
                       </div>
@@ -257,7 +343,7 @@ export function FeedbackWidget(): JSX.Element {
                     {form.attachments.length < MAX_ATTACHMENTS ? (
                       <label className="feedback-widget__attachment-upload">
                         <input type="file" accept="image/png,image/jpeg,image/jpg" onChange={handleFileChange} />
-                        <span>上传</span>
+                        <span>{TEXT.upload}</span>
                       </label>
                     ) : null}
                   </div>
@@ -268,7 +354,7 @@ export function FeedbackWidget(): JSX.Element {
                   open={showDiagnostics}
                   onToggle={(event) => setShowDiagnostics((event.target as HTMLDetailsElement).open)}
                 >
-                  <summary>诊断信息将自动上传（点击查看）</summary>
+                  <summary>{TEXT.diagSummary}</summary>
                   <pre>{JSON.stringify(diagnostics, null, 2)}</pre>
                 </details>
 
@@ -276,10 +362,10 @@ export function FeedbackWidget(): JSX.Element {
 
                 <div className="feedback-widget__actions">
                   <button type="button" onClick={closePanel} className="feedback-widget__secondary">
-                    取消
+                    {TEXT.cancel}
                   </button>
                   <button type="submit" disabled={isSubmitDisabled}>
-                    {status === 'submitting' ? '提交中…' : '提交反馈'}
+                    {status === 'submitting' ? TEXT.submitting : TEXT.submit}
                   </button>
                 </div>
               </form>

@@ -1,4 +1,5 @@
-const APP_URL = process.env.APP_URL ?? "http://localhost:5173";
+// 应用地址，用于认证相关邮件的跳转；默认使用生产域名，避免遗漏环境变量时发本地链接。
+const APP_URL = (process.env.APP_URL ?? "https://voiceinsight.cloud").replace(/\/+$/, "");
 
 type MailTemplate = {
   subject: string;
@@ -6,25 +7,40 @@ type MailTemplate = {
   text: string;
 };
 
-export function buildVerificationEmail(token: string): MailTemplate {
+type Lang = "zh" | "en";
+
+export function buildVerificationEmail(token: string, lang: Lang = "zh"): MailTemplate {
   const baseUrl = APP_URL.replace(/\/$/, "");
   const link = `${baseUrl}/email/verify?token=${encodeURIComponent(token)}`;
+  if (lang === "en") {
+    return {
+      subject: "Voice Insight - Please verify your email",
+      html: `
+        <p>Welcome to Voice Insight.</p>
+        <p>Please click the link below to verify your email (valid for 24 hours):</p>
+        <p><a href="${link}">${link}</a></p>
+        <p>If you did not request this, you can ignore this email.</p>
+      `,
+      text: [
+        "Welcome to Voice Insight.",
+        "Please visit the link below to verify your email (valid for 24 hours):",
+        link,
+        "",
+        "If you did not request this, you can ignore this email."
+      ].join("\n")
+    };
+  }
   return {
-    subject: "Product Insight - 请验证您的邮箱",
+    subject: "Voice Insight - 请验证您的邮箱",
+    // 极简 HTML，避免花哨样式/按钮，降低被过滤概率。
     html: `
-      <div style="font-family:Inter,Segoe UI,sans-serif;font-size:15px;color:#1f2937;line-height:1.6;">
-        <h2 style="margin-bottom:12px;">欢迎使用 Product Insight</h2>
-        <p>感谢注册！点击下方按钮完成邮箱验证，以便开始使用 1 天免费试用：</p>
-        <p style="margin:24px 0;">
-          <a href="${link}" style="display:inline-block;padding:12px 28px;background:#2563eb;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">验证邮箱</a>
-        </p>
-        <p>若按钮无法点击，请复制以下链接到浏览器打开：</p>
-        <p style="word-break:break-all;color:#2563eb;">${link}</p>
-        <p style="margin-top:32px;color:#6b7280;font-size:13px;">该链接 24 小时内有效。如非本人操作，可忽略此邮件。</p>
-      </div>
+      <p>欢迎使用 Voice Insight。</p>
+      <p>请点击下方链接完成邮箱验证（24 小时内有效）：</p>
+      <p><a href="${link}">${link}</a></p>
+      <p>如果不是您本人操作，可忽略此邮件。</p>
     `,
     text: [
-      "欢迎使用 Product Insight",
+      "欢迎使用 Voice Insight",
       "感谢注册！请访问以下链接完成邮箱验证（24 小时内有效）：",
       link,
       "",
@@ -33,22 +49,34 @@ export function buildVerificationEmail(token: string): MailTemplate {
   };
 }
 
-export function buildResetPasswordEmail(token: string): MailTemplate {
+export function buildResetPasswordEmail(token: string, lang: Lang = "zh"): MailTemplate {
   const baseUrl = APP_URL.replace(/\/$/, "");
   const link = `${baseUrl}/password/reset?token=${encodeURIComponent(token)}`;
+  if (lang === "en") {
+    return {
+      subject: "Voice Insight - Reset your password",
+      html: `
+        <p>You requested a password reset.</p>
+        <p>Please click the link below to reset your password (valid for 24 hours):</p>
+        <p><a href="${link}">${link}</a></p>
+        <p>If you did not request this, you can ignore this email.</p>
+      `,
+      text: [
+        "You requested a password reset.",
+        "Please use the link below to reset your password (valid for 24 hours):",
+        link,
+        "",
+        "If you did not request this, you can ignore this email."
+      ].join("\n")
+    };
+  }
   return {
-    subject: "Product Insight - 重置密码",
+    subject: "Voice Insight - 重置密码",
     html: `
-      <div style="font-family:Inter,Segoe UI,sans-serif;font-size:15px;color:#1f2937;line-height:1.6;">
-        <h2 style="margin-bottom:12px;">重置密码请求</h2>
-        <p>如果这是您发起的请求，请点击下方按钮重置密码：</p>
-        <p style="margin:24px 0;">
-          <a href="${link}" style="display:inline-block;padding:12px 28px;background:#2563eb;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">重置密码</a>
-        </p>
-        <p>若按钮无法点击，请复制以下链接到浏览器打开：</p>
-        <p style="word-break:break-all;color:#2563eb;">${link}</p>
-        <p style="margin-top:32px;color:#6b7280;font-size:13px;">如果您未进行该操作，可以忽略此邮件。</p>
-      </div>
+      <p>您发起了重置密码请求。</p>
+      <p>请点击下方链接完成密码重置（24 小时内有效）：</p>
+      <p><a href="${link}">${link}</a></p>
+      <p>如果不是您本人操作，可以忽略此邮件。</p>
     `,
     text: [
       "您发起了重置密码请求。",

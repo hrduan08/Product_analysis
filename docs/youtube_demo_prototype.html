@@ -139,12 +139,10 @@
     <div class="nav-bar">
       <div class="shell nav-inner">
         <div class="nav-left">
-          <div class="logo-mark"><span>PI</span>Product Insight</div>
+          <div class="logo-mark"><span>VI</span>Voice Insight</div>
           <div class="nav-menu">
-            <a href="#features">产品功能</a>
-            <a href="#usecases">行业方案</a>
-            <a href="#resources">资源中心</a>
-            <a href="#membership">会员订阅</a>
+            <a href="#hero">首页</a>
+            <a href="#features">核心卖点</a>
           </div>
         </div>
         <div class="nav-actions">
@@ -158,277 +156,45 @@
     <section class="hero">
       <div class="shell hero-grid">
         <div>
-          <h1>洞察全球用户声音，用 7 天构建可订阅的产品情报平台</h1>
-          <p>Product Insight 聚合 YouTube、Reddit 等渠道反馈，自动提炼热点、生成邮件卡片，并联动会员订阅系统完成付费转化。</p>
-          <div class="hero-logos"></div>
+          <h1>自动监听社媒用户声音，洞察真实需求</h1>
+          <p>告别手动翻 YouTube / Reddit / X，每天自动抓取热门评价与讨论，推送到你常用的 IM 与邮箱，直达可执行的改进点。</p>
+          <div style="display:flex; gap:12px; margin-top:18px;">
+            <a class="btn primary" href="ui-register.html">免费试用</a>
+            <button class="btn">查看示例报告</button>
+          </div>
+          <p style="margin-top:14px; color:var(--muted); font-size:14px;">支持飞书、企业微信、钉钉、Lark、Slack 等多渠道送达。</p>
         </div>
         <div class="hero-panel" style="max-width:600px; text-align:left;">
           <img src="https://images.unsplash.com/photo-1525182008055-f88b95ff7980?auto=format&fit=crop&w=1100&q=70" alt="screenshot" />
-          <p style="font-size:14px; color:var(--muted); margin:0; text-align:center;">展示搜索配置和增量邮件卡片，突出真实使用场景。</p>
+          <p style="font-size:14px; color:var(--muted); margin:0; text-align:center;">示例：每日定时推送 + AI 摘要，直接看到用户需求与吐槽要点。</p>
         </div>
       </div>
     </section>
 
     <section class="section" id="features">
       <header>
-        <h2>一个容器即可浏览所有关键功能</h2>
-        <p>参考主流 SaaS 交互，将核心亮点集中在可滚动的功能容器中，左侧按钮用于快速定位，右侧展示实时示意。</p>
+        <h2>核心卖点 · 直击手动筛选的痛点</h2>
+        <p>围绕“自动监听 + 定时推送 + AI 总结”三件事，让你每天只看结论，不再逐条翻帖子。</p>
       </header>
-      <div class="shell feature-wrapper">
-        <div class="feature-list">
-          <div class="feature-button">跨平台关键词订阅 · 支持多收件人</div>
-          <div class="feature-button">增量识别 + 模板化摘要邮件</div>
-          <div class="feature-button">会员配额管理 &amp; 自动续费提醒</div>
-          <div class="feature-button">微信 / 支付宝 / Stripe 多渠道支付</div>
-          <div class="feature-button">任务监控、失败重试与告警</div>
-          <div class="feature-button">自助导出 CSV / API</div>
-        </div>
-        <div class="feature-canvas">
-          <h3>实时示意：配置 → 推送 → 付费</h3>
-          <p>用户在同一个容器里完成配置、查看推送样例、并了解付费权益。容器支持上下滚动，逐条浏览具体功能点。</p>
-          <ul>
-            <li>关键词面板提示剩余额度，达到上限自动禁用按钮。</li>
-            <li>摘要邮件预览包含播放量、评论数、跳转链接。</li>
-            <li>会员卡片对齐支付页，告知到期日与升级入口。</li>
-          </ul>
-          <p style="color:var(--muted);">交互：滚动容器、Hover 卡片、在移动端自动堆叠。</p>
-        </div>
-      </div>
-    </section>
-
-    <section class="section" id="usecases">
-      <header>
-        <h2>应用场景 · 几乎覆盖所有行业</h2>
-        <p>用案例来讲故事，让访客快速匹配自身业务。</p>
-      </header>
-      <div class="shell use-cases">
-        <div class="use-case">新兴产品口碑追踪</div>
-        <div class="use-case">品牌舆情与危机监控</div>
-        <div class="use-case">市场/竞品研究</div>
-        <div class="use-case">投研信息挖掘</div>
-        <div class="use-case">运营日报自动化</div>
-        <div class="use-case">内容创意灵感库</div>
-      </div>
-    </section>
-
-    <section class="section" id="resources">
-      <header>
-        <h2>资源中心 &amp; 我们如何帮助你上手</h2>
-        <p>借鉴竞品“帮助信息”布局，提供多维度指南。</p>
-      </header>
-      <div class="shell resource-grid">
-        <article class="resource">
-          <h4>入门指南</h4>
-          <p>5 分钟配置首个关键词，含截图与表单示例。</p>
+      <div class="shell" style="display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr));">
+        <article class="card">
+          <h3>每日定时抓取，多渠道推送</h3>
+          <p style="color:var(--muted); line-height:1.6;">自动筛选最新热门视频/帖子，按你设定的时间推送；支持飞书、企业微信、钉钉、Lark、Slack，省去每日手动搜索与筛选。</p>
         </article>
-        <article class="resource">
-          <h4>开放 API 与 Webhook</h4>
-          <p>提供 Postman Collection、速查表与常见错误。</p>
+        <article class="card">
+          <h3>按你的节奏监听，自定义关键词 / 时间 / 渠道</h3>
+          <p style="color:var(--muted); line-height:1.6;">自由配置品牌/竞品关键词、监听时段与通知渠道，满足不同团队的关注点和作息，不再错过关键反馈。</p>
         </article>
-        <article class="resource">
-          <h4>采集合规与隐私</h4>
-          <p>展示数据处理协议、GDPR / CCPA 说明。</p>
+        <article class="card">
+          <h3>AI 总结用户需求与改进点，节省逐条观看</h3>
+          <p style="color:var(--muted); line-height:1.6;">AI 解析视频与帖子，提炼需求与吐槽，直接给出改进清单与要点摘要，让你只看结论即可行动。</p>
         </article>
-        <article class="resource">
-          <h4>客户故事 / 模板</h4>
-          <p>按行业分类的成功案例，可直接复制模板。</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="section" id="cta">
-      <div class="shell cta-banner">
-        <h2 style="margin-bottom:12px;">立即注册，解锁 7 天正式会员体验</h2>
-        <p style="margin-bottom:24px;">无需信用卡即可开始；如果需要提前配置支付方式，也提供卡号预授权流程。</p>
-        <div class="cta-row" style="justify-content:center;">
-          <a class="btn primary" href="ui-register.html">注册并体验</a>
-          <button class="btn">下载演示数据</button>
-        </div>
-      </div>
-    </section>
-
-    <section class="section" id="membership">
-      <header>
-        <h2>会员订阅 · 直接选择套餐并支付</h2>
-        <p>页面只保留月度与年度两档，点击卡片底部“订阅”即生成订单并弹出个人收款码。</p>
-      </header>
-      <div class="shell" style="display:grid; gap:24px; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));">
-        <article class="card" style="display:flex; flex-direction:column; gap:12px;">
-          <h3>月度会员</h3>
-          <p style="margin:0; font-weight:700; font-size:18px;">¥99 / 月</p>
-          <ul style="padding-left:18px; color:var(--muted); line-height:1.6; flex:1;">
-            <li>2 个关键词</li>
-            <li>每日 2 个执行时间</li>
-            <li>飞书 + 邮件通知</li>
-            <li>付款后上传截图给客服，即时开通</li>
-          </ul>
-          <button class="btn primary" style="width:100%;">订阅（跳转支付码）</button>
-        </article>
-
-        <article class="card" style="display:flex; flex-direction:column; gap:12px;">
-          <h3>年度会员</h3>
-          <p style="margin:0; font-weight:700; font-size:18px;">¥999 / 年</p>
-          <ul style="padding-left:18px; color:var(--muted); line-height:1.6; flex:1;">
-            <li>10 个关键词</li>
-            <li>每日 5 个执行时间</li>
-            <li>飞书 + 邮件通知</li>
-            <li>立省 17%，一次付清</li>
-          </ul>
-          <button class="btn primary" style="width:100%;">订阅（跳转支付码）</button>
-        </article>
-      </div>
-    </section>
-
-    <section class="section" id="admin-orders">
-      <header>
-        <h2>客服后台 · 待核实订单列表</h2>
-        <p>该后台页面只对客服和超级管理员开放，用于核对个人收款码的付款截图并手动开通会员。</p>
-      </header>
-      <div class="shell pending-orders">
-        <table>
-          <thead>
-            <tr>
-              <th>订单号</th>
-              <th>账号邮箱</th>
-              <th>套餐</th>
-              <th>金额</th>
-              <th>创建时间</th>
-              <th>客服动作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>PI202503120021</td>
-              <td>user@demo.com</td>
-              <td>月度会员</td>
-              <td>¥99</td>
-              <td>2025-03-12 11:00</td>
-              <td>
-                <button class="btn secondary">确认支付</button>
-              </td>
-            </tr>
-            <tr>
-              <td>PI202503120018</td>
-              <td>team@acme.io</td>
-              <td>年度会员</td>
-              <td>¥999</td>
-              <td>2025-03-12 10:32</td>
-              <td>
-                <button class="btn secondary">联系用户</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <p class="plan-meta" style="margin-top:12px;">
-          客服在此列表中核对用户发来的支付截图与账号信息，确认无误后点击“确认支付”，系统随即开通会员并记录账单。用户无法访问该页面。
-        </p>
-      </div>
-    </section>
-
-    <section class="section" id="app-dashboard">
-      <header>
-        <h2>登录后首页 · 任务与订阅总览</h2>
-        <p>用户登录后不再执行临时搜索，而是查看所有定时任务的运行结果、订阅权益与摘要通知。导航与首页一致，Logo 可返回营销站，账号入口集中在右上角。</p>
-      </header>
-      <div class="shell">
-        <div class="app-demo">
-          <div class="app-demo__top">
-            <a class="logo-mark app-demo__home-link" href="#hero" title="返回首页">
-              <span>PI</span>Product Insight
-            </a>
-            <div class="app-demo__top-actions">
-              <button class="btn text">中文 ▾</button>
-              <div class="app-demo__avatar" title="打开账号面板">RD</div>
-            </div>
-          </div>
-
-          <div class="app-demo__summary">
-            <div class="account-info-card">
-              <div class="account-info-card__row">
-                <div class="account-info-card__block">
-                  <span class="account-info-card__label">订阅状态</span>
-                  <p class="account-info-card__value">已订阅年度会员</p>
-                  <p class="account-info-card__meta">权益：5 个定时任务 + 2 个通知渠道</p>
-                  <div class="account-info-card__meta account-info-card__meta-line" style="margin-top:10px;">
-                    <span>到期日：2025/12/28</span>
-                    <button type="button">续费</button>
-                  </div>
-                </div>
-                <div class="account-info-card__block">
-                  <span class="account-info-card__label">搜索配置摘要</span>
-                  <p class="account-info-card__value">YouTube + Reddit</p>
-                  <p class="account-info-card__meta">关键词：smart band 等 · 每日 09:00 · 通知：飞书 + 邮件</p>
-                  <a class="account-info-card__subaction" href="/app/search-config">修改搜索配置</a>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="app-stack">
-            <article class="app-card app-card--wide">
-              <div class="app-card__header">
-                <h4>定时任务执行记录</h4>
-                <a href="/app/search-config">查看全部任务</a>
-              </div>
-              <table class="task-table">
-                <thead>
-                  <tr>
-                    <th>任务</th>
-                    <th>平台</th>
-                    <th>最近运行</th>
-                    <th>新增反馈</th>
-                    <th>状态</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>
-                      <div class="task-item">
-                        <strong>AI 手环情绪监控</strong>
-                        <span>关键词：smart band, 情绪检测</span>
-                      </div>
-                    </td>
-                    <td>YouTube + Reddit</td>
-                    <td>今天 09:00</td>
-                    <td>18 条</td>
-                    <td><span class="task-status task-status--ok">完成</span></td>
-                  </tr>
-                  <tr>
-                    <td>
-                      <div class="task-item">
-                        <strong>Vision Pro 开箱体验</strong>
-                        <span>关键词：vision pro unboxing</span>
-                      </div>
-                    </td>
-                    <td>YouTube</td>
-                    <td>今天 08:30</td>
-                    <td>7 条</td>
-                    <td><span class="task-status task-status--ok">完成</span></td>
-                  </tr>
-                  <tr>
-                    <td>
-                      <div class="task-item">
-                        <strong>Reddit 客服声量</strong>
-                        <span>关键词：refund policy</span>
-                      </div>
-                    </td>
-                    <td>Reddit</td>
-                    <td>昨天 22:00</td>
-                    <td>0 条</td>
-                    <td><span class="task-status task-status--warning">等待巡检</span></td>
-                  </tr>
-                </tbody>
-              </table>
-            </article>
-
-          </div>
-        </div>
       </div>
     </section>
 
     <footer class="footer minimal-footer">
       <div class="shell" style="text-align:center; color:var(--muted);">
-        <span>© 2025 Product Insight</span>
+        <span>© 2025 Voice Insight</span>
       </div>
     </footer>
 

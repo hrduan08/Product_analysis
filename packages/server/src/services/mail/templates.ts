@@ -1,6 +1,7 @@
 // 该文件集中构建订阅相关邮件模板，包括试用提醒与订阅成功通知。
 
-const APP_ORIGIN = process.env.APP_URL ?? "http://localhost:5173"; // 应用前端地址，用于生成跳转链接。
+// 应用前端地址，用于生成邮件中的跳转链接；默认指向生产域名，避免遗漏环境变量时发出本地地址。
+const APP_ORIGIN = (process.env.APP_URL ?? "https://voiceinsight.cloud").replace(/\/+$/, "");
 
 /**
  * 构建试用到期提醒邮件内容。
