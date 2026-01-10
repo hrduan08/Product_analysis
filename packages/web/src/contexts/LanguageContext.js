@@ -7,7 +7,10 @@ export function LanguageProvider({ children }) {
         if (typeof window === 'undefined')
             return 'zh';
         const saved = window.localStorage.getItem(STORAGE_KEY);
-        return saved === 'en' || saved === 'zh' ? saved : 'zh';
+        if (saved === 'en' || saved === 'zh')
+            return saved;
+        const browserLang = (navigator.languages?.[0] ?? navigator.language ?? '').toLowerCase();
+        return browserLang.startsWith('zh') ? 'zh' : 'en';
     });
     const setLang = (next) => {
         setLangState(next);

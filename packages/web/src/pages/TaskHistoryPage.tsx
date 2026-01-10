@@ -32,6 +32,7 @@ export function TaskHistoryPage(): JSX.Element {
   const [runsLoading, setRunsLoading] = useState(false);
   const [runsError, setRunsError] = useState<string | null>(null);
   const avatarRef = useRef<HTMLDivElement | null>(null);
+  const langRef = useRef<HTMLDivElement | null>(null);
   const [langOpen, setLangOpen] = useState(false);
 
   const TEXT = t({
@@ -131,6 +132,17 @@ export function TaskHistoryPage(): JSX.Element {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (!langOpen) return;
+    const handleLangClickOutside = (event: MouseEvent) => {
+      if (langRef.current && !langRef.current.contains(event.target as Node)) {
+        setLangOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleLangClickOutside);
+    return () => document.removeEventListener('mousedown', handleLangClickOutside);
+  }, [langOpen]);
+
   const handleLogout = async () => {
     setLogoutLoading(true);
     try {
@@ -156,7 +168,7 @@ export function TaskHistoryPage(): JSX.Element {
           </span>
         </Link>
         <div className="dashboard-nav__actions" ref={avatarRef}>
-          <div className="nav-lang">
+          <div className="nav-lang" ref={langRef}>
             <button type="button" className="btn text" onClick={() => setLangOpen((v) => !v)}>
               {TEXT.nav.language}
             </button>

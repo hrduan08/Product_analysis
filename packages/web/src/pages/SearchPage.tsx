@@ -32,6 +32,7 @@ export function SearchPage() {
   const tapTimerRef = useRef<number | null>(null);
   const adminUnlockedRef = useRef(false);
   const avatarRef = useRef<HTMLDivElement | null>(null);
+  const langRef = useRef<HTMLDivElement | null>(null);
   const [adminModalOpen, setAdminModalOpen] = useState(false);
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [adminPasswordError, setAdminPasswordError] = useState<string | null>(null);
@@ -390,6 +391,17 @@ export function SearchPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (!langOpen) return;
+    const handleLangClickOutside = (event: MouseEvent) => {
+      if (langRef.current && !langRef.current.contains(event.target as Node)) {
+        setLangOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleLangClickOutside);
+    return () => document.removeEventListener('mousedown', handleLangClickOutside);
+  }, [langOpen]);
+
   const handleSecretTap = () => {
     if (!user || !SUPER_ADMINS.includes((user.email ?? '').toLowerCase())) {
       return;
@@ -557,7 +569,7 @@ export function SearchPage() {
           </span>
         </Link>
         <div className="dashboard-nav__actions" ref={avatarRef}>
-          <div className="nav-lang">
+          <div className="nav-lang" ref={langRef}>
             <button type="button" className="btn text" onClick={() => setLangOpen((v) => !v)}>
               {TEXT.nav.language}
             </button>

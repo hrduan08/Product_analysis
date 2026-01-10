@@ -83,6 +83,9 @@ export function LandingPage() {
   const { lang } = useLanguage();
   const navigate = useNavigate();
 
+  const customizeImg = lang === 'zh' ? '/assets/logos/customize.png' : '/assets/logos/customize_en.png';
+  const customizeAlt = lang === 'zh' ? '自定义配置示意图' : 'Custom configuration preview';
+
   const handleStartTrial = () => {
     if (user) {
       navigate('/app');
@@ -167,7 +170,7 @@ export function LandingPage() {
                   ) : null}
                   {feature.iconType === 'custom' ? (
                     <div className="st-media-placeholder">
-                      <img src="/assets/logos/customize.png" alt="自定义配置示意图" loading="lazy" />
+                      <img src={customizeImg} alt={customizeAlt} loading="lazy" />
                     </div>
                   ) : null}
                   {feature.iconType === 'notify' ? (

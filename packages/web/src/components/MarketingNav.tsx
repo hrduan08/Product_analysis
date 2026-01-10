@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../contexts/AuthContext';
@@ -19,6 +19,8 @@ export function MarketingNav() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
+  const langRef = useRef<HTMLDivElement | null>(null);
+  const avatarRef = useRef<HTMLDivElement | null>(null);
 
   const navText = lang === 'zh'
     ? { login: '登录', register: '注册', dashboard: '控制台', langLabel: '语言', zh: '中文', en: 'English' }
@@ -59,6 +61,28 @@ export function MarketingNav() {
     }
   };
 
+  useEffect(() => {
+    if (!langOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (langRef.current && !langRef.current.contains(event.target as Node)) {
+        setLangOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [langOpen]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleMenuOutside = (event: MouseEvent) => {
+      if (avatarRef.current && !avatarRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleMenuOutside);
+    return () => document.removeEventListener('mousedown', handleMenuOutside);
+  }, [menuOpen]);
+
   return (
     <div className="nav-bar">
       <div className="shell nav-inner">
@@ -71,7 +95,7 @@ export function MarketingNav() {
           </Link>
         </div>
         <div className="nav-actions">
-          <div className="nav-lang">
+          <div className="nav-lang" ref={langRef}>
             <button type="button" className="btn text" onClick={() => setLangOpen((v) => !v)}>
               {navText.langLabel}
             </button>
@@ -105,7 +129,7 @@ export function MarketingNav() {
               <Link className="btn" to="/app">
                 {navText.dashboard}
               </Link>
-              <div className="nav-avatar-wrapper">
+              <div className="nav-avatar-wrapper" ref={avatarRef}>
                 <button
                   type="button"
                   className="dashboard-avatar"

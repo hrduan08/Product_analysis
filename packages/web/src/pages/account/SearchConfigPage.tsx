@@ -75,6 +75,7 @@ export function SearchConfigPage(): JSX.Element {
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [adminPasswordError, setAdminPasswordError] = useState<string | null>(null);
   const avatarRef = useRef<HTMLDivElement | null>(null);
+  const langRef = useRef<HTMLDivElement | null>(null);
   const [langOpen, setLangOpen] = useState(false);
 
   const NAV_TEXT = t({
@@ -263,6 +264,17 @@ export function SearchConfigPage(): JSX.Element {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!langOpen) return;
+    const handleLangClickOutside = (event: MouseEvent) => {
+      if (langRef.current && !langRef.current.contains(event.target as Node)) {
+        setLangOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleLangClickOutside);
+    return () => document.removeEventListener('mousedown', handleLangClickOutside);
+  }, [langOpen]);
 
   if (!user) {
     return <Navigate to="/" replace />;
@@ -557,7 +569,7 @@ export function SearchConfigPage(): JSX.Element {
         </span>
       </Link>
       <div className="dashboard-nav__actions" ref={avatarRef}>
-        <div className="nav-lang">
+        <div className="nav-lang" ref={langRef}>
           <button type="button" className="btn text" onClick={() => setLangOpen((v) => !v)}>
             {NAV_TEXT.language}
           </button>

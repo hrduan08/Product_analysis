@@ -23,6 +23,7 @@ export function TaskHistoryPage() {
     const [runsLoading, setRunsLoading] = useState(false);
     const [runsError, setRunsError] = useState(null);
     const avatarRef = useRef(null);
+    const langRef = useRef(null);
     const [langOpen, setLangOpen] = useState(false);
     const TEXT = t({
         zh: {
@@ -118,6 +119,17 @@ export function TaskHistoryPage() {
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+    useEffect(() => {
+        if (!langOpen)
+            return;
+        const handleLangClickOutside = (event) => {
+            if (langRef.current && !langRef.current.contains(event.target)) {
+                setLangOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleLangClickOutside);
+        return () => document.removeEventListener('mousedown', handleLangClickOutside);
+    }, [langOpen]);
     const handleLogout = async () => {
         setLogoutLoading(true);
         try {
@@ -132,7 +144,7 @@ export function TaskHistoryPage() {
     if (!user) {
         return _jsx(Navigate, { to: "/", replace: true });
     }
-    return (_jsxs("div", { className: "dashboard", children: [_jsxs("header", { className: "dashboard-nav", children: [_jsxs(Link, { className: "logo-mark", to: "/", children: [_jsx("img", { src: "/assets/logos/logo.png", alt: "VoiceInsight", className: "logo-img" }), _jsxs("span", { className: "logo-word", children: ["Voice", _jsx("span", { className: "logo-word__accent", children: "Insight" })] })] }), _jsxs("div", { className: "dashboard-nav__actions", ref: avatarRef, children: [_jsxs("div", { className: "nav-lang", children: [_jsx("button", { type: "button", className: "btn text", onClick: () => setLangOpen((v) => !v), children: TEXT.nav.language }), langOpen ? (_jsxs("div", { className: "nav-lang__menu", children: [_jsx("button", { type: "button", className: `nav-lang__item${lang === 'zh' ? ' is-active' : ''}`, onClick: () => {
+    return (_jsxs("div", { className: "dashboard", children: [_jsxs("header", { className: "dashboard-nav", children: [_jsxs(Link, { className: "logo-mark", to: "/", children: [_jsx("img", { src: "/assets/logos/logo.png", alt: "VoiceInsight", className: "logo-img" }), _jsxs("span", { className: "logo-word", children: ["Voice", _jsx("span", { className: "logo-word__accent", children: "Insight" })] })] }), _jsxs("div", { className: "dashboard-nav__actions", ref: avatarRef, children: [_jsxs("div", { className: "nav-lang", ref: langRef, children: [_jsx("button", { type: "button", className: "btn text", onClick: () => setLangOpen((v) => !v), children: TEXT.nav.language }), langOpen ? (_jsxs("div", { className: "nav-lang__menu", children: [_jsx("button", { type: "button", className: `nav-lang__item${lang === 'zh' ? ' is-active' : ''}`, onClick: () => {
                                                     setLang('zh');
                                                     setLangOpen(false);
                                                 }, children: TEXT.nav.zh }), _jsx("button", { type: "button", className: `nav-lang__item${lang === 'en' ? ' is-active' : ''}`, onClick: () => {

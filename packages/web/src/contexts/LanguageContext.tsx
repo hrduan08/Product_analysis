@@ -17,7 +17,9 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(() => {
     if (typeof window === 'undefined') return 'zh';
     const saved = window.localStorage.getItem(STORAGE_KEY) as Lang | null;
-    return saved === 'en' || saved === 'zh' ? saved : 'zh';
+    if (saved === 'en' || saved === 'zh') return saved;
+    const browserLang = (navigator.languages?.[0] ?? navigator.language ?? '').toLowerCase();
+    return browserLang.startsWith('zh') ? 'zh' : 'en';
   });
 
   const setLang = (next: Lang) => {

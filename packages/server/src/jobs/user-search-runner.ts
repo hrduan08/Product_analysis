@@ -23,7 +23,7 @@ import { runKeywordSync } from './keyword-sync.js';
 import { getTierLimitsByStatus } from '../config/search-limits.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { YoutubeRateLimitError } from '../services/youtube/quota-manager.js';
-import { sendFeishuWebhookMessage, buildFeishuTextPayload, type FeishuWebhookPayload } from '../services/feishu.js';
+import { sendFeishuWebhookMessage, type FeishuWebhookPayload } from '../services/feishu.js';
 
 export type UserSearchJobResult = {
   processed: number;
@@ -170,36 +170,27 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
 
       if (attemptFeishu) {
         try {
-          const chunks = chunkArray(selectedItems, MAX_FEISHU_CARD_ITEMS);
-          let sentCount = 0;
-
-          for (const chunk of chunks) {
-            await sendFeishuWebhookMessage({
-            webhook: config.feishu_webhook!,
-            payload: buildFeishuCardPayload({
-              items: chunk,
-              keywords,
-              platforms: activePlatforms,
-              summary
-            })
-          });
-            sentCount += 1;
+          if (selectedItems.length === 0) {
+            console.log(`${logLabel} 飞书通知已开启，但无新增内容且不再发送汇总文本，跳过发送`);
+          } else {
+            let sentCount = 0;
+            for (const item of selectedItems) {
+              await sendFeishuWebhookMessage({
+                webhook: config.feishu_webhook!,
+                payload: buildFeishuCardPayload({
+                  items: [item],
+                  keywords,
+                  platforms: activePlatforms,
+                  summary
+                })
+              });
+              sentCount += 1;
+            }
+            feishuMessagesSent = sentCount;
+            feishuDelivered = true;
+            await updateFeishuChannelStatus(userId, { status: 'ok' }).catch(() => undefined);
+            console.log(`${logLabel} 飞书通知发送完成，逐条发送 ${sentCount} 条卡片`);
           }
-
-          // 追加一条纯文本兜底，便于人工确认消息是否送达
-          await sendFeishuWebhookMessage({
-            webhook: config.feishu_webhook!,
-            payload: buildFeishuTextPayload(
-              `本轮定时搜索：新增 ${selectedItems.length} 条，关键词：${keywords.join(
-                ', '
-              ) || '-'}，平台：${activePlatforms.join(', ') || '-'}。如未看到卡片，请查看机器人消息或刷新群聊。`
-            )
-          });
-          sentCount += 1;
-          feishuMessagesSent = sentCount;
-          feishuDelivered = true;
-          await updateFeishuChannelStatus(userId, { status: 'ok' }).catch(() => undefined);
-          console.log(`${logLabel} 飞书通知发送完成，新增条数=${selectedItems.length}，发送卡片 ${chunks.length} 条`);
         } catch (error) {
           channelErrors.feishu = error instanceof Error ? error.message : String(error);
           await updateFeishuChannelStatus(userId, { status: 'failed' }).catch(() => undefined);
