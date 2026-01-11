@@ -21,7 +21,7 @@ export function RegisterPage() {
     const TEXT = t({
         zh: {
             title: '创建账号',
-            subtitle: '注册后将自动开启 1 天试用',
+            subtitle: '注册后将自动开启 7 天试用',
             hasAccount: '已经有账号？',
             goLogin: '立即登录',
             email: '邮箱',
@@ -42,7 +42,7 @@ export function RegisterPage() {
         },
         en: {
             title: 'Create account',
-            subtitle: 'Start a 1-day trial automatically after signup',
+            subtitle: 'Start a 7-day trial automatically after signup',
             hasAccount: 'Already have an account?',
             goLogin: 'Log in',
             email: 'Email',

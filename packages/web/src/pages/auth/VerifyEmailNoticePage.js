@@ -13,10 +13,9 @@ export function VerifyEmailNoticePage() {
     const TEXT = t({
         zh: {
             title: '验证您的邮箱',
-            subtitle: (email) => `我们已将验证邮件发送至 ${email}`,
+            subtitle: (email) => `我们已将验证邮件发送至 ${email}，请在验证邮件中点击验证链接，链接有效期 24 小时。`,
             footerTip: '已经完成验证？',
             backLogin: '返回登录',
-            tip: '请前往邮箱点击验证链接，链接有效期 24 小时。',
             alert: '注意：如果收件箱没收到验证邮件，有可能被误识别为垃圾邮件了，请在“垃圾邮件”、“垃圾箱”或其他分类中检查一下。',
             resend: '重新发送验证邮件',
             resending: '发送中...',
@@ -25,10 +24,9 @@ export function VerifyEmailNoticePage() {
         },
         en: {
             title: 'Verify your email',
-            subtitle: (email) => `We have sent a verification email to ${email}`,
+            subtitle: (email) => `We have sent a verification email to ${email}, please click the link in your inbox. The link is valid for 24 hours.`,
             footerTip: 'Already verified?',
             backLogin: 'Back to login',
-            tip: 'Please click the verification link in your email. The link is valid for 24 hours.',
             alert: 'Note: If you cannot find it in your inbox, please check spam/junk or other folders.',
             resend: 'Resend verification email',
             resending: 'Sending...',
@@ -55,5 +53,5 @@ export function VerifyEmailNoticePage() {
             setMessage(error instanceof Error ? error.message : TEXT.fail);
         }
     };
-    return (_jsx(AuthLayout, { title: TEXT.title, subtitle: TEXT.subtitle(user.email), footer: _jsxs("div", { className: "auth-form__footer", children: [_jsx("span", { children: TEXT.footerTip }), _jsx(Link, { to: "/login", children: TEXT.backLogin })] }), children: _jsxs("div", { className: "auth-notice auth-notice--compact", children: [_jsx("p", { children: TEXT.tip }), _jsx("p", { className: "auth-notice__alert", children: TEXT.alert }), message ? (_jsx("div", { className: `auth-notice__message auth-notice__message--${status === 'error' ? 'error' : 'success'}`, children: message })) : null, _jsx("button", { type: "button", className: "auth-form__submit", onClick: handleResend, disabled: status === 'loading', children: status === 'loading' ? TEXT.resending : TEXT.resend })] }) }));
+    return (_jsx(AuthLayout, { title: TEXT.title, subtitle: TEXT.subtitle(user.email), footer: _jsxs("div", { className: "auth-form__footer", children: [_jsx("span", { children: TEXT.footerTip }), _jsx(Link, { to: "/login", children: TEXT.backLogin })] }), children: _jsxs("div", { className: "auth-notice auth-notice--compact", children: [_jsx("p", { className: "auth-notice__alert", style: { marginTop: 0, marginBottom: 0 }, children: TEXT.alert }), message ? (_jsx("div", { className: `auth-notice__message auth-notice__message--${status === 'error' ? 'error' : 'success'}`, children: message })) : null, _jsx("button", { type: "button", className: "auth-form__submit", onClick: handleResend, disabled: status === 'loading', children: status === 'loading' ? TEXT.resending : TEXT.resend })] }) }));
 }
