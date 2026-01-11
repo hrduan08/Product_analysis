@@ -15,10 +15,10 @@ export function VerifyEmailNoticePage() {
   const TEXT = t({
     zh: {
       title: '验证您的邮箱',
-      subtitle: (email: string) => `我们已将验证邮件发送至 ${email}`,
+      subtitle: (email: string) =>
+        `我们已将验证邮件发送至 ${email}，请在验证邮件中点击验证链接，链接有效期 24 小时。`,
       footerTip: '已经完成验证？',
       backLogin: '返回登录',
-      tip: '请前往邮箱点击验证链接，链接有效期 24 小时。',
       alert: '注意：如果收件箱没收到验证邮件，有可能被误识别为垃圾邮件了，请在“垃圾邮件”、“垃圾箱”或其他分类中检查一下。',
       resend: '重新发送验证邮件',
       resending: '发送中...',
@@ -27,10 +27,10 @@ export function VerifyEmailNoticePage() {
     },
     en: {
       title: 'Verify your email',
-      subtitle: (email: string) => `We have sent a verification email to ${email}`,
+      subtitle: (email: string) =>
+        `We have sent a verification email to ${email}, please click the link in your inbox. The link is valid for 24 hours.`,
       footerTip: 'Already verified?',
       backLogin: 'Back to login',
-      tip: 'Please click the verification link in your email. The link is valid for 24 hours.',
       alert: 'Note: If you cannot find it in your inbox, please check spam/junk or other folders.',
       resend: 'Resend verification email',
       resending: 'Sending...',
@@ -72,8 +72,7 @@ export function VerifyEmailNoticePage() {
       }
     >
       <div className="auth-notice auth-notice--compact">
-        <p>{TEXT.tip}</p>
-        <p className="auth-notice__alert">
+        <p className="auth-notice__alert" style={{ marginTop: 0, marginBottom: 0 }}>
           {TEXT.alert}
         </p>
         {message ? (

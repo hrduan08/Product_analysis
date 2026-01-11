@@ -356,32 +356,9 @@ function buildFeishuCardPayload(input: {
     finishedAt: Date;
   };
 }): FeishuWebhookPayload {
-  const keywordText = input.keywords.length ? input.keywords.join('、') : '未设置';
-  const platformText =
-    input.platforms.length > 0 ? input.platforms.map(formatPlatformLabel).join('、') : '未选择';
-  const elements: Array<Record<string, unknown>> = [
-    {
-      tag: 'div',
-      text: {
-        tag: 'lark_md',
-        content: `**执行时间**：${FEISHU_DATE_FORMATTER.format(input.summary.finishedAt)}\n**新增内容**：${input.items.length} 条`
-      }
-    },
-    {
-      tag: 'div',
-      fields: [
-        {
-          is_short: true,
-          text: { tag: 'lark_md', content: `**关键词**\n${escapeFeishuMarkdown(keywordText)}` }
-        },
-        {
-          is_short: true,
-          text: { tag: 'lark_md', content: `**平台**\n${escapeFeishuMarkdown(platformText)}` }
-        }
-      ]
-    },
-    { tag: 'hr' }
-  ];
+  const elements: Array<Record<string, unknown>> = [];
+  const headerTitle =
+    input.items.length > 0 ? input.items[0].title || '定时搜索提醒' : '定时搜索提醒';
 
   if (input.items.length === 0) {
     elements.push({
@@ -396,11 +373,6 @@ function buildFeishuCardPayload(input: {
       const publishedText = published ? FEISHU_DATE_FORMATTER.format(published) : '未知';
       const keyword = item.keyword ? escapeFeishuMarkdown(item.keyword) : '-';
       const author = item.author ? escapeFeishuMarkdown(item.author) : '-';
-
-      elements.push({
-        tag: 'div',
-        text: { tag: 'lark_md', content: `**#${index + 1} ${escapeFeishuMarkdown(item.title)}**` }
-      });
 
       elements.push({
         tag: 'column_set',
@@ -470,19 +442,7 @@ function buildFeishuCardPayload(input: {
         elements.push({ tag: 'hr' });
       }
     });
-
-    if (input.items.length > MAX_FEISHU_CARD_ITEMS) {
-      elements.push({
-        tag: 'markdown',
-        content: `还有 ${input.items.length - MAX_FEISHU_CARD_ITEMS} 条内容未展示，请前往控制台查看。`
-      });
-    }
   }
-
-  elements.push({
-    tag: 'note',
-    elements: [{ tag: 'plain_text', content: '如需关闭飞书通知，请前往搜索配置控制台修改。' }]
-  });
 
   return {
     msg_type: 'interactive',
@@ -493,7 +453,7 @@ function buildFeishuCardPayload(input: {
       },
       header: {
         template: 'turquoise',
-        title: { tag: 'plain_text', content: '定时搜索提醒' }
+        title: { tag: 'plain_text', content: headerTitle }
       },
       elements
     }

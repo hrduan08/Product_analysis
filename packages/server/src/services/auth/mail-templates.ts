@@ -20,13 +20,17 @@ export function buildVerificationEmail(token: string, lang: Lang = "zh"): MailTe
         <p>Please click the link below to verify your email (valid for 24 hours):</p>
         <p><a href="${link}">${link}</a></p>
         <p>If you did not request this, you can ignore this email.</p>
+        <p>If you have any questions, contact us at <a href="mailto:contact@voiceinsight.cloud">contact@voiceinsight.cloud</a>.</p>
+        <p>— Voice Insight · <a href="https://voiceinsight.cloud">https://voiceinsight.cloud</a></p>
       `,
       text: [
         "Welcome to Voice Insight.",
         "Please visit the link below to verify your email (valid for 24 hours):",
         link,
         "",
-        "If you did not request this, you can ignore this email."
+        "If you did not request this, you can ignore this email.",
+        "If you have any questions, contact us at contact@voiceinsight.cloud.",
+        "— Voice Insight · https://voiceinsight.cloud"
       ].join("\n")
     };
   }
@@ -38,13 +42,17 @@ export function buildVerificationEmail(token: string, lang: Lang = "zh"): MailTe
       <p>请点击下方链接完成邮箱验证（24 小时内有效）：</p>
       <p><a href="${link}">${link}</a></p>
       <p>如果不是您本人操作，可忽略此邮件。</p>
+      <p>如有疑问，可邮件联系 <a href="mailto:contact@voiceinsight.cloud">contact@voiceinsight.cloud</a>。</p>
+      <p>— Voice Insight · <a href="https://voiceinsight.cloud">https://voiceinsight.cloud</a></p>
     `,
     text: [
       "欢迎使用 Voice Insight",
       "感谢注册！请访问以下链接完成邮箱验证（24 小时内有效）：",
       link,
       "",
-      "如果不是您本人操作，可忽略此邮件。"
+      "如果不是您本人操作，可忽略此邮件。",
+      "如有疑问，可邮件联系 contact@voiceinsight.cloud。",
+      "— Voice Insight · https://voiceinsight.cloud"
     ].join("\n")
   };
 }
@@ -60,13 +68,17 @@ export function buildResetPasswordEmail(token: string, lang: Lang = "zh"): MailT
         <p>Please click the link below to reset your password (valid for 24 hours):</p>
         <p><a href="${link}">${link}</a></p>
         <p>If you did not request this, you can ignore this email.</p>
+        <p>If you have any questions, contact us at <a href="mailto:contact@voiceinsight.cloud">contact@voiceinsight.cloud</a>.</p>
+        <p>— Voice Insight · <a href="https://voiceinsight.cloud">https://voiceinsight.cloud</a></p>
       `,
       text: [
         "You requested a password reset.",
         "Please use the link below to reset your password (valid for 24 hours):",
         link,
         "",
-        "If you did not request this, you can ignore this email."
+        "If you did not request this, you can ignore this email.",
+        "If you have any questions, contact us at contact@voiceinsight.cloud.",
+        "— Voice Insight · https://voiceinsight.cloud"
       ].join("\n")
     };
   }
@@ -77,13 +89,17 @@ export function buildResetPasswordEmail(token: string, lang: Lang = "zh"): MailT
       <p>请点击下方链接完成密码重置（24 小时内有效）：</p>
       <p><a href="${link}">${link}</a></p>
       <p>如果不是您本人操作，可以忽略此邮件。</p>
+      <p>如有疑问，可邮件联系 <a href="mailto:contact@voiceinsight.cloud">contact@voiceinsight.cloud</a>。</p>
+      <p>— Voice Insight · <a href="https://voiceinsight.cloud">https://voiceinsight.cloud</a></p>
     `,
     text: [
       "您发起了重置密码请求。",
       "请访问以下链接完成密码重置（24 小时内有效）：",
       link,
       "",
-      "如果不是您本人操作，可以忽略此邮件。"
+      "如果不是您本人操作，可以忽略此邮件。",
+      "如有疑问，可邮件联系 contact@voiceinsight.cloud。",
+      "— Voice Insight · https://voiceinsight.cloud"
     ].join("\n")
   };
 }

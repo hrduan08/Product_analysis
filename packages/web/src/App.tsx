@@ -28,6 +28,7 @@ export function App(): JSX.Element { // 定义并导出 App 根组件。
       <AuthProvider> {/* 使用认证上下文包裹整个应用，提供登录状态 */}
         <Routes> {/* 配置路由表 */}
           <Route path="/" element={<LandingPage />} /> {/* SaaS 首页 */}
+          <Route path="/zh" element={<LandingPage />} /> {/* 中文入口，便于搜索引擎抓取 */}
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/preview/payment" element={<PaymentPreviewPage />} />
           <Route path="/preview/dashboard" element={<DashboardPreviewPage />} />
