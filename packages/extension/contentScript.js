@@ -7,6 +7,25 @@ function debugLog(...args) {
 
 const PLAYER_RESPONSE_WAIT_MS = 1200;
 const PLAYER_RESPONSE_POLL_MS = 150;
+const NAVIGATION_GRACE_MS = 5000;
+const NAVIGATION_TRACK_WAIT_MS = 4000;
+const NAVIGATION_POLL_MS = 200;
+
+let lastNavigateAt = 0;
+let lastNavigateVideoId = "";
+let lastNavigateUrl = "";
+
+function markNavigation(source) {
+  lastNavigateAt = Date.now();
+  lastNavigateUrl = window.location.href;
+  lastNavigateVideoId = extractVideoIdFromLocation(lastNavigateUrl);
+  debugLog("navigation", source, lastNavigateVideoId);
+}
+
+function isRecentNavigation() {
+  if (!lastNavigateAt) return false;
+  return Date.now() - lastNavigateAt < NAVIGATION_GRACE_MS;
+}
 
 function isElementVisible(element) {
   if (!element) return false;
@@ -156,6 +175,10 @@ function buildTrackInfo(track) {
 async function handleGetCaptions(preferredLanguage) {
   const expectedVideoId = extractVideoIdFromLocation(window.location.href);
   let response = readPlayerResponse(expectedVideoId);
+  const recentNav = isRecentNavigation();
+  const waitMs = recentNav
+    ? Math.max(PLAYER_RESPONSE_WAIT_MS, NAVIGATION_GRACE_MS)
+    : PLAYER_RESPONSE_WAIT_MS;
   if (
     expectedVideoId &&
     (!response?.videoDetails?.videoId ||
@@ -163,7 +186,7 @@ async function handleGetCaptions(preferredLanguage) {
   ) {
     response = await waitForPlayerResponse(
       expectedVideoId,
-      PLAYER_RESPONSE_WAIT_MS,
+      waitMs,
       PLAYER_RESPONSE_POLL_MS
     );
   }
@@ -183,7 +206,18 @@ async function handleGetCaptions(preferredLanguage) {
     };
   }
   const video = readVideoDetails(response);
-  const tracks = readCaptionTracks(response);
+  let tracks = readCaptionTracks(response);
+  if ((!tracks || tracks.length === 0) && recentNav) {
+    const waited = await waitForCaptionTracks(
+      expectedVideoId,
+      NAVIGATION_TRACK_WAIT_MS,
+      NAVIGATION_POLL_MS
+    );
+    if (waited) {
+      response = waited;
+      tracks = readCaptionTracks(response);
+    }
+  }
   if (!tracks || tracks.length === 0) {
     return { ok: false, error: "no_caption_tracks" };
   }
@@ -246,6 +280,24 @@ async function waitForPlayerResponse(expectedVideoId, timeoutMs, intervalMs) {
   return readPlayerResponse(expectedVideoId) || readPlayerResponse();
 }
 
+async function waitForCaptionTracks(expectedVideoId, timeoutMs, intervalMs) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const candidate = readPlayerResponse(expectedVideoId);
+    if (
+      candidate?.videoDetails?.videoId &&
+      (!expectedVideoId || candidate.videoDetails.videoId === expectedVideoId)
+    ) {
+      const tracks = readCaptionTracks(candidate);
+      if (tracks && tracks.length > 0) {
+        return candidate;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return null;
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "GET_CAPTIONS") {
     const preferredLanguage =
@@ -269,6 +321,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 });
 
+
+document.addEventListener("yt-navigate-start", () => markNavigation("start"), true);
+document.addEventListener("yt-navigate-finish", () => markNavigation("finish"), true);
+document.addEventListener(
+  "yt-page-data-updated",
+  () => markNavigation("page-data"),
+  true
+);
+window.addEventListener("popstate", () => markNavigation("popstate"));
 
 
 async function handleGetTranscriptDom() {
