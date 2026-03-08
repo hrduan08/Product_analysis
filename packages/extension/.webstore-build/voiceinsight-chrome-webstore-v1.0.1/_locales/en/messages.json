@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "VoiceInsight - YouTube字幕下载"
+  },
+  "extensionDescription": {
+    "message": "Easily download subtitles/CC while browsing YouTube videos."
+  },
+  "actionTitle": {
+    "message": "Download Subtitles/CC"
+  }
+}

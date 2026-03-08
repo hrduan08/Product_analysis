@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "VoiceInsight - YouTube字幕下载"
+  },
+  "extensionDescription": {
+    "message": "浏览YouTube视频时，可一键下载对应视频的字幕文件。"
+  },
+  "actionTitle": {
+    "message": "下载字幕"
+  }
+}

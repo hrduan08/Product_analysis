@@ -334,15 +334,10 @@ window.addEventListener("popstate", () => markNavigation("popstate"));
 async function handleGetTranscriptDom() {
   const title = readVisibleVideoTitle();
   const cached = readTranscriptFromDom();
-  if (cached.text) {
+  if (cached) {
     return {
       ok: true,
-      data: {
-        transcript: cached.text,
-        timeline: cached.timeline,
-        languageCode: "unknown",
-        title,
-      },
+      data: { transcript: cached, languageCode: "unknown", title },
     };
   }
   const opened = await openTranscriptPanel();
@@ -354,66 +349,30 @@ async function handleGetTranscriptDom() {
     };
   }
   const transcript = await waitForTranscriptText(4500);
-  if (!transcript.text) {
+  if (!transcript) {
     return { ok: false, error: "transcript_empty", debug: opened.debug || null };
   }
   return {
     ok: true,
-    data: {
-      transcript: transcript.text,
-      timeline: transcript.timeline,
-      languageCode: "unknown",
-      title,
-    },
+    data: { transcript, languageCode: "unknown", title },
   };
 }
 
 function readTranscriptFromDom() {
-  const segmentRenderers = Array.from(
-    document.querySelectorAll("ytd-transcript-segment-renderer")
-  );
-  if (segmentRenderers.length > 0) {
-    const timeline = [];
-    for (const segment of segmentRenderers) {
-      const textNode = segment.querySelector("#segment-text, .segment-text");
-      const startNode = segment.querySelector(
-        "#start, .segment-timestamp, .cue-group-start-offset"
-      );
-      const text = normalizeTranscriptText(textNode?.textContent);
-      if (!text) continue;
-      const timestamp = normalizeTranscriptTimestamp(startNode?.textContent);
-      const previous = timeline[timeline.length - 1];
-      if (
-        previous &&
-        previous.text === text &&
-        previous.timestamp === timestamp
-      ) {
-        continue;
-      }
-      timeline.push({ timestamp, text });
-    }
-    if (timeline.length > 0) {
-      return {
-        text: timeline.map((entry) => entry.text).join(" ").trim(),
-        timeline: timeline.filter((entry) => Boolean(entry.timestamp)),
-      };
-    }
-  }
-
   const nodes = Array.from(
     document.querySelectorAll(
       "ytd-transcript-segment-renderer #segment-text, ytd-transcript-segment-renderer .segment-text, ytd-transcript-body-renderer #segment-text, ytd-transcript-body-renderer .segment-text, #segments-container #segment-text"
     )
   );
-  if (!nodes.length) return { text: "", timeline: [] };
+  if (!nodes.length) return "";
   const lines = [];
   for (const node of nodes) {
-    const text = normalizeTranscriptText(node.textContent);
+    const text = String(node.textContent || "").replace(/\s+/g, " ").trim();
     if (!text) continue;
     if (lines[lines.length - 1] === text) continue;
     lines.push(text);
   }
-  return { text: lines.join(" ").trim(), timeline: [] };
+  return lines.join(" ").trim();
 }
 
 function isTranscriptPanelOpen() {
@@ -438,11 +397,11 @@ function isTranscriptPanelOpen() {
 async function waitForTranscriptText(timeoutMs) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const transcript = readTranscriptFromDom();
-    if (transcript.text) return transcript;
+    const text = readTranscriptFromDom();
+    if (text) return text;
     await sleep(200);
   }
-  return { text: "", timeline: [] };
+  return "";
 }
 
 async function openTranscriptPanel() {
@@ -789,17 +748,6 @@ function normalizeVideoTitle(text) {
   return String(text || "")
     .replace(/\s*-\s*youtube\s*$/i, "")
     .trim();
-}
-
-function normalizeTranscriptText(text) {
-  return String(text || "").replace(/\s+/g, " ").trim();
-}
-
-function normalizeTranscriptTimestamp(timestamp) {
-  const value = String(timestamp || "").replace(/\s+/g, " ").trim();
-  if (!value) return "";
-  const match = value.match(/(\d{1,2}:)?\d{1,2}:\d{2}/);
-  return match ? match[0] : value;
 }
 
 function sleep(ms) {
