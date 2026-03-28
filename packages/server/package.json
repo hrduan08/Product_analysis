@@ -7,8 +7,11 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "dev:agent": "tsx watch src/agent.ts",
     "build": "tsup src/index.ts --format esm --out-dir dist --clean",
+    "build:agent": "tsup src/agent.ts --format esm --out-dir dist-agent --clean",
     "start": "node dist/index.js",
+    "start:agent": "node dist-agent/agent.js",
     "test": "vitest run",
     "postinstall": "prisma generate",
     "seed:plans": "tsx scripts/seed-plans.ts",
