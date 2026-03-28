@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>VoiceInsight</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <div class="brand-title">
+          <img class="brand-logo" src="icons/brand-logo-128.png" alt="" />
+          <div class="title" data-i18n="app_title">VoiceInsight</div>
+        </div>
+        <div class="subtitle subtitle-offset" data-i18n="app_subtitle">YouTube 字幕下载助手</div>
+      </header>
+
+      <section class="controls">
+        <button id="analyzeBtn" class="primary" data-i18n="action_download">下载字幕</button>
+        <div id="complianceNote" class="compliance-note">
+          <div class="compliance-title" data-i18n="notice_title">使用说明：</div>
+          <div class="compliance-text" data-i18n="notice_download_location">
+            请先打开 YouTube 视频页面，在对应视频页面中点击此插件下载字幕。
+          </div>
+        </div>
+        <div id="status" class="status hidden"></div>
+        <div id="progress" class="progress hidden">
+          <div class="progress-track">
+            <div id="progressBar" class="progress-bar"></div>
+          </div>
+          <div id="progressText" class="progress-text">0%</div>
+          <button
+            id="cancelDownload"
+            class="cancel-download hidden"
+            type="button"
+            aria-label="Cancel download"
+          >
+            ×
+          </button>
+        </div>
+        <div id="captionSaved" class="caption-saved hidden">
+          <div class="caption-path">
+            <div class="caption-label" data-i18n="caption_saved_label">查看字幕</div>
+            <div id="captionPath" class="caption-value">
+              <span data-i18n="caption_saved_prefix_a">字幕已下载完成，请在“</span>
+              <strong data-i18n="caption_saved_download_word">下载</strong>
+              <span data-i18n="caption_saved_prefix_b">”目录中查看字幕文件。在</span>
+              <a
+                id="voiceInsightInlineLink"
+                class="caption-inline-link"
+                href="https://www.voiceinsight.cloud"
+                target="_blank"
+                rel="noreferrer"
+                data-i18n="caption_saved_link_text"
+              >
+                VoiceInsight
+              </a>
+              <span data-i18n="caption_saved_suffix">
+                官网中设置您关注的关键词，即可自动追踪并分析你关注的同类视频。
+              </span>
+            </div>
+          </div>
+          <div class="caption-actions">
+            <button id="openCaptionDir" class="secondary" data-i18n="action_open_caption_dir">
+              查看字幕
+            </button>
+          </div>
+        </div>
+        <div id="error" class="error hidden"></div>
+      </section>
+
+      <footer class="footer">
+        <div class="lang-toggle" role="group" data-i18n-aria="lang_toggle_aria" aria-label="Language">
+          <button id="langZh" class="lang-btn" data-i18n="lang_zh">中文</button>
+          <button id="langEn" class="lang-btn" data-i18n="lang_en">EN</button>
+        </div>
+      </footer>
+
+      <section id="result" class="result hidden">
+        <div class="meta">
+          <div id="videoTitle" class="meta-title"></div>
+          <div id="modelInfo" class="meta-subtitle"></div>
+        </div>
+
+        <div class="block">
+          <div class="block-title" data-i18n="result_summary">摘要</div>
+          <div id="summary" class="block-content"></div>
+        </div>
+
+        <div class="block">
+          <div class="block-title" data-i18n="result_key_points">要点</div>
+          <ul id="keyPoints" class="list"></ul>
+        </div>
+
+        <div class="block">
+          <div class="block-title" data-i18n="result_sentiment">情绪</div>
+          <div id="sentiment" class="block-content"></div>
+        </div>
+
+        <div class="block">
+          <div class="block-title" data-i18n="result_tags">标签</div>
+          <div id="tags" class="tags"></div>
+        </div>
+
+        <div id="warnings" class="warnings hidden"></div>
+      </section>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

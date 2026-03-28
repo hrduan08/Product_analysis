@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VoiceInsight</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand-row">
+          <div class="brand">
+            <img
+              id="brandLogo"
+              class="brand-logo"
+              src="icons/brand-logo-128.png"
+              alt=""
+            />
+            <div>
+              <div class="title" data-i18n="app_title">VoiceInsight</div>
+              <div class="subtitle" data-i18n="app_subtitle">YouTube 字幕助手</div>
+            </div>
+          </div>
+          <div
+            class="lang-toggle"
+            role="group"
+            data-i18n-aria="lang_toggle_aria"
+            aria-label="语言"
+          >
+            <button id="langZh" class="lang-btn" type="button" data-i18n="lang_zh">
+              中文
+            </button>
+            <button id="langEn" class="lang-btn" type="button" data-i18n="lang_en">
+              EN
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <section class="action-wrap">
+        <div class="action-grid">
+          <button
+            id="downloadBtn"
+            type="button"
+            class="btn secondary action-download"
+            data-i18n="action_download"
+          >
+            下载字幕
+          </button>
+          <button id="copyBtn" type="button" class="btn action-copy" data-i18n="action_copy">
+            复制字幕
+          </button>
+          <button
+            id="timeToggleBtn"
+            type="button"
+            class="btn toggle action-time"
+            data-i18n="action_time"
+            aria-pressed="false"
+          >
+            时间
+          </button>
+          <select id="formatSelect" class="select action-format" aria-label="format select">
+            <option value="txt" data-i18n="format_txt">TXT</option>
+            <option value="srt" data-i18n="format_srt">SRT</option>
+            <option value="vtt" data-i18n="format_vtt">VTT</option>
+          </select>
+          <button
+            id="refreshBtn"
+            type="button"
+            class="btn secondary action-refresh"
+            data-i18n="action_refresh"
+          >
+            刷新
+          </button>
+        </div>
+      </section>
+
+      <section id="debugWrap" class="debug-wrap is-hidden">
+        <div class="debug-head">
+          <span id="debugBizTitle" class="debug-title" data-i18n="debug_process_title">
+            字幕提取过程
+          </span>
+          <button
+            id="copyDiagBtn"
+            type="button"
+            class="btn debug-btn"
+            data-i18n="action_copy_diagnostics"
+          >
+            Copy Diagnostics
+          </button>
+        </div>
+        <div id="debugBizList" class="debug-biz-list" aria-live="polite"></div>
+      </section>
+
+      <section class="transcript-head">
+        <span class="transcript-title" data-i18n="section_transcript">字幕内容</span>
+        <span id="transcriptLang" class="transcript-lang">语言：Unknown</span>
+      </section>
+
+      <section id="lineList" class="line-list" aria-live="polite"></section>
+      <div id="statusToast" class="status-toast is-hidden" role="status" aria-live="polite"></div>
+
+      <footer class="footer">
+        <span class="hint">
+          <span data-i18n="footer_hint_prefix">更多功能请访问</span>
+          <button id="guideLink" type="button" class="hint-link" data-i18n="footer_hint_link">
+            VoiceInsight官网
+          </button>
+        </span>
+      </footer>
+    </div>
+
+    <script src="popup.shared.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

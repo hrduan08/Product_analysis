@@ -1,0 +1,807 @@
+const DEBUG = true;
+
+function debugLog(...args) {
+  if (!DEBUG) return;
+  console.log("[yt-analyzer]", ...args);
+}
+
+const PLAYER_RESPONSE_WAIT_MS = 1200;
+const PLAYER_RESPONSE_POLL_MS = 150;
+const NAVIGATION_GRACE_MS = 5000;
+const NAVIGATION_TRACK_WAIT_MS = 4000;
+const NAVIGATION_POLL_MS = 200;
+
+let lastNavigateAt = 0;
+let lastNavigateVideoId = "";
+let lastNavigateUrl = "";
+
+function markNavigation(source) {
+  lastNavigateAt = Date.now();
+  lastNavigateUrl = window.location.href;
+  lastNavigateVideoId = extractVideoIdFromLocation(lastNavigateUrl);
+  debugLog("navigation", source, lastNavigateVideoId);
+}
+
+function isRecentNavigation() {
+  if (!lastNavigateAt) return false;
+  return Date.now() - lastNavigateAt < NAVIGATION_GRACE_MS;
+}
+
+function isElementVisible(element) {
+  if (!element) return false;
+  const style = window.getComputedStyle(element);
+  if (style.display === "none" || style.visibility === "hidden") return false;
+  const rect = element.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return false;
+  return true;
+}
+
+function readPlayerResponse(expectedVideoId) {
+  const fromPlayer = readPlayerResponseFromPlayer();
+  const fromWindow = readPlayerResponseFromWindow();
+  const fromDom = readPlayerResponseFromDom();
+  if (expectedVideoId) {
+    if (fromPlayer?.videoDetails?.videoId === expectedVideoId) return fromPlayer;
+    if (fromWindow?.videoDetails?.videoId === expectedVideoId) return fromWindow;
+    if (fromDom?.videoDetails?.videoId === expectedVideoId) return fromDom;
+  }
+  return fromPlayer || fromWindow || fromDom || null;
+}
+
+function readPlayerResponseFromPlayer() {
+  try {
+    const player = document.getElementById("movie_player");
+    if (!player) return null;
+    if (typeof player.getPlayerResponse === "function") {
+      const response = player.getPlayerResponse();
+      if (response && typeof response === "object") return response;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function readPlayerResponseFromWindow() {
+  if (window.ytInitialPlayerResponse) {
+    return window.ytInitialPlayerResponse;
+  }
+  const rawResponse = window.ytplayer?.config?.args?.player_response;
+  if (rawResponse) {
+    if (typeof rawResponse === "string") {
+      try {
+        return JSON.parse(rawResponse);
+      } catch {
+        return null;
+      }
+    }
+    return rawResponse;
+  }
+  return null;
+}
+
+function readPlayerResponseFromDom() {
+  const scripts = Array.from(document.scripts || []);
+  const candidates = scripts
+    .map((script) => script.textContent || "")
+    .filter(Boolean);
+  const preferred = candidates.find(
+    (text) =>
+      text.includes("ytInitialPlayerResponse") &&
+      text.includes("captionTracks")
+  );
+  const fallback = candidates.find((text) =>
+    text.includes("ytInitialPlayerResponse")
+  );
+  const scriptText = preferred || fallback;
+  if (!scriptText) return null;
+  const jsonText = extractJsonAfterMarker(
+    scriptText,
+    "ytInitialPlayerResponse"
+  );
+  if (!jsonText) return null;
+  try {
+    return JSON.parse(jsonText);
+  } catch {
+    return null;
+  }
+}
+
+function extractJsonAfterMarker(text, marker) {
+  const markerIndex = text.indexOf(marker);
+  if (markerIndex === -1) return null;
+  const start = text.indexOf("{", markerIndex);
+  if (start === -1) return null;
+  let depth = 0;
+  for (let i = start; i < text.length; i += 1) {
+    const char = text[i];
+    if (char === "{") depth += 1;
+    if (char === "}") depth -= 1;
+    if (depth === 0) {
+      return text.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+function readVideoDetails(response) {
+  return {
+    videoId: response?.videoDetails?.videoId ?? "",
+    title: response?.videoDetails?.title ?? document.title ?? "",
+    url: window.location.href,
+  };
+}
+
+function readCaptionTracks(response) {
+  return (
+    response?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? []
+  );
+}
+
+function formatTrackName(track) {
+  if (track?.name?.simpleText) return track.name.simpleText;
+  if (Array.isArray(track?.name?.runs)) {
+    return track.name.runs.map((run) => run.text).join("");
+  }
+  return track?.languageCode ?? "unknown";
+}
+
+function pickBestTrack(tracks, preferredLanguage) {
+  if (!tracks || tracks.length === 0) return null;
+  const preferred = (preferredLanguage ?? "").toLowerCase();
+  const matches = preferred
+    ? tracks.filter((track) =>
+        (track.languageCode ?? "").toLowerCase().startsWith(preferred)
+      )
+    : [];
+  const pickManual = (list) =>
+    list.find((track) => track.kind !== "asr") ?? list[0];
+  if (matches.length > 0) return pickManual(matches);
+  const manual = tracks.find((track) => track.kind !== "asr");
+  return manual ?? tracks[0];
+}
+
+function buildTrackInfo(track) {
+  return {
+    baseUrl: track.baseUrl,
+    languageCode: track.languageCode,
+    name: formatTrackName(track),
+    kind: track.kind ?? "",
+    isAutoGenerated: track.kind === "asr",
+  };
+}
+
+
+async function handleGetCaptions(preferredLanguage) {
+  const expectedVideoId = extractVideoIdFromLocation(window.location.href);
+  let response = readPlayerResponse(expectedVideoId);
+  const recentNav = isRecentNavigation();
+  const waitMs = recentNav
+    ? Math.max(PLAYER_RESPONSE_WAIT_MS, NAVIGATION_GRACE_MS)
+    : PLAYER_RESPONSE_WAIT_MS;
+  if (
+    expectedVideoId &&
+    (!response?.videoDetails?.videoId ||
+      response.videoDetails.videoId !== expectedVideoId)
+  ) {
+    response = await waitForPlayerResponse(
+      expectedVideoId,
+      waitMs,
+      PLAYER_RESPONSE_POLL_MS
+    );
+  }
+  if (!response) {
+    return { ok: false, error: "player_response_not_found" };
+  }
+  if (
+    expectedVideoId &&
+    response?.videoDetails?.videoId &&
+    response.videoDetails.videoId !== expectedVideoId
+  ) {
+    return {
+      ok: false,
+      error: "player_response_mismatch",
+      expectedVideoId,
+      actualVideoId: response.videoDetails.videoId,
+    };
+  }
+  const video = readVideoDetails(response);
+  let tracks = readCaptionTracks(response);
+  if ((!tracks || tracks.length === 0) && recentNav) {
+    const waited = await waitForCaptionTracks(
+      expectedVideoId,
+      NAVIGATION_TRACK_WAIT_MS,
+      NAVIGATION_POLL_MS
+    );
+    if (waited) {
+      response = waited;
+      tracks = readCaptionTracks(response);
+    }
+  }
+  if (!tracks || tracks.length === 0) {
+    return { ok: false, error: "no_caption_tracks" };
+  }
+  const selected = pickBestTrack(tracks, preferredLanguage);
+  if (!selected?.baseUrl) {
+    return { ok: false, error: "caption_track_missing_url" };
+  }
+  return {
+    ok: true,
+    data: {
+      video,
+      track: buildTrackInfo(selected),
+      trackCount: tracks.length,
+    },
+  };
+}
+
+function extractVideoIdFromLocation(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes("youtu.be")) {
+      return parsed.pathname.replace("/", "");
+    }
+    if (parsed.hostname.includes("youtube.com")) {
+      const v = parsed.searchParams.get("v");
+      if (v) return v;
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      const shortsIndex = parts.indexOf("shorts");
+      if (shortsIndex !== -1 && parts[shortsIndex + 1]) {
+        return parts[shortsIndex + 1];
+      }
+      const embedIndex = parts.indexOf("embed");
+      if (embedIndex !== -1 && parts[embedIndex + 1]) {
+        return parts[embedIndex + 1];
+      }
+      const liveIndex = parts.indexOf("live");
+      if (liveIndex !== -1 && parts[liveIndex + 1]) {
+        return parts[liveIndex + 1];
+      }
+      return "";
+    }
+  } catch {
+    return "";
+  }
+  return "";
+}
+
+async function waitForPlayerResponse(expectedVideoId, timeoutMs, intervalMs) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const candidate = readPlayerResponse(expectedVideoId);
+    if (
+      candidate?.videoDetails?.videoId &&
+      candidate.videoDetails.videoId === expectedVideoId
+    ) {
+      return candidate;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return readPlayerResponse(expectedVideoId) || readPlayerResponse();
+}
+
+async function waitForCaptionTracks(expectedVideoId, timeoutMs, intervalMs) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const candidate = readPlayerResponse(expectedVideoId);
+    if (
+      candidate?.videoDetails?.videoId &&
+      (!expectedVideoId || candidate.videoDetails.videoId === expectedVideoId)
+    ) {
+      const tracks = readCaptionTracks(candidate);
+      if (tracks && tracks.length > 0) {
+        return candidate;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return null;
+}
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "GET_CAPTIONS") {
+    const preferredLanguage =
+      typeof message.preferredLanguage === "string"
+        ? message.preferredLanguage
+        : "en";
+    handleGetCaptions(preferredLanguage)
+      .then((result) => sendResponse(result))
+      .catch((error) =>
+        sendResponse({ ok: false, error: error?.message || "unknown_error" })
+      );
+    return true;
+  }
+  if (message?.type === "GET_TRANSCRIPT_DOM") {
+    handleGetTranscriptDom()
+      .then((result) => sendResponse(result))
+      .catch((error) =>
+        sendResponse({ ok: false, error: error?.message || "unknown_error" })
+      );
+    return true;
+  }
+});
+
+
+document.addEventListener("yt-navigate-start", () => markNavigation("start"), true);
+document.addEventListener("yt-navigate-finish", () => markNavigation("finish"), true);
+document.addEventListener(
+  "yt-page-data-updated",
+  () => markNavigation("page-data"),
+  true
+);
+window.addEventListener("popstate", () => markNavigation("popstate"));
+
+async function handleGetTranscriptDom() {
+  const title = readVisibleVideoTitle();
+  const cached = readTranscriptFromDom();
+  if (cached.text) {
+    return {
+      ok: true,
+      data: {
+        transcript: cached.text,
+        timeline: cached.timeline,
+        languageCode: "unknown",
+        title,
+      },
+    };
+  }
+  const opened = await openTranscriptPanel();
+  if (!opened.ok) {
+    return {
+      ok: false,
+      error: opened.error || "transcript_panel_not_found",
+      debug: opened.debug || null,
+    };
+  }
+  const transcript = await waitForTranscriptText(4500);
+  if (!transcript.text) {
+    return { ok: false, error: "transcript_empty", debug: opened.debug || null };
+  }
+  return {
+    ok: true,
+    data: {
+      transcript: transcript.text,
+      timeline: transcript.timeline,
+      languageCode: "unknown",
+      title,
+    },
+  };
+}
+
+function readTranscriptFromDom() {
+  const segmentRenderers = Array.from(
+    document.querySelectorAll("ytd-transcript-segment-renderer")
+  );
+  if (segmentRenderers.length > 0) {
+    const timeline = [];
+    for (const segment of segmentRenderers) {
+      const textNode = segment.querySelector("#segment-text, .segment-text");
+      const startNode = segment.querySelector(
+        "#start, .segment-timestamp, .cue-group-start-offset"
+      );
+      const text = normalizeTranscriptText(textNode?.textContent);
+      if (!text) continue;
+      const timestamp = normalizeTranscriptTimestamp(startNode?.textContent);
+      const previous = timeline[timeline.length - 1];
+      if (
+        previous &&
+        previous.text === text &&
+        previous.timestamp === timestamp
+      ) {
+        continue;
+      }
+      timeline.push({ timestamp, text });
+    }
+    if (timeline.length > 0) {
+      return {
+        text: timeline.map((entry) => entry.text).join(" ").trim(),
+        timeline: timeline.filter((entry) => Boolean(entry.timestamp)),
+      };
+    }
+  }
+
+  const nodes = Array.from(
+    document.querySelectorAll(
+      "ytd-transcript-segment-renderer #segment-text, ytd-transcript-segment-renderer .segment-text, ytd-transcript-body-renderer #segment-text, ytd-transcript-body-renderer .segment-text, #segments-container #segment-text"
+    )
+  );
+  if (!nodes.length) return { text: "", timeline: [] };
+  const lines = [];
+  for (const node of nodes) {
+    const text = normalizeTranscriptText(node.textContent);
+    if (!text) continue;
+    if (lines[lines.length - 1] === text) continue;
+    lines.push(text);
+  }
+  return { text: lines.join(" ").trim(), timeline: [] };
+}
+
+function isTranscriptPanelOpen() {
+  const panels = [
+    document.querySelector(
+      'ytd-engagement-panel-section-list-renderer[target-id*="transcript"]'
+    ),
+    document.querySelector("ytd-transcript-renderer"),
+    document.querySelector("ytd-transcript-body-renderer"),
+  ].filter(Boolean);
+  for (const panel of panels) {
+    if (isNodeHidden(panel)) continue;
+    const visibility = String(panel.getAttribute("visibility") || "").toLowerCase();
+    if (visibility.includes("hidden")) continue;
+    return true;
+  }
+  if (document.querySelector("ytd-transcript-segment-renderer")) return true;
+  if (document.querySelector("#segments-container #segment-text")) return true;
+  return false;
+}
+
+async function waitForTranscriptText(timeoutMs) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const transcript = readTranscriptFromDom();
+    if (transcript.text) return transcript;
+    await sleep(200);
+  }
+  return { text: "", timeline: [] };
+}
+
+async function openTranscriptPanel() {
+  const debug = {
+    url: window.location.href,
+    alreadyOpen: false,
+    directCandidates: 0,
+    directLabels: [],
+    directClicked: "",
+    menuCandidates: 0,
+    menuButtonLabels: [],
+    menuClicked: "",
+    menuItems: [],
+  };
+  if (isTranscriptPanelOpen()) {
+    debug.alreadyOpen = true;
+    return { ok: true, debug };
+  }
+  await expandDescriptionIfNeeded();
+  const direct = await clickDirectTranscriptButton(debug);
+  if (direct && (await waitForTranscriptPanel(2500))) {
+    return { ok: true, debug };
+  }
+  const fromMenu = await clickTranscriptMenuItem(debug);
+  if (fromMenu && (await waitForTranscriptPanel(3000))) {
+    return { ok: true, debug };
+  }
+  return { ok: false, error: "transcript_panel_not_found", debug };
+}
+
+async function clickDirectTranscriptButton(debug) {
+  const buttons = findDirectTranscriptButtons();
+  if (debug) {
+    debug.directCandidates = buttons.length;
+    debug.directLabels = buttons
+      .map((button) => normalizeLabel(readNodeText(button)))
+      .filter(Boolean)
+      .slice(0, 12);
+  }
+  if (DEBUG) {
+    debugLog("direct transcript candidates", buttons.length);
+  }
+  for (const button of buttons) {
+    if (!isElementVisible(button)) continue;
+    if (button.closest("ytd-player")) continue;
+    if (button.closest("#movie_player")) continue;
+    const label = normalizeLabel(readNodeText(button));
+    if (!isTranscriptActionLabel(label)) continue;
+    if (debug) {
+      debug.directClicked = label;
+    }
+    button.click();
+    await sleep(150);
+    return true;
+  }
+  return false;
+}
+
+async function clickTranscriptMenuItem(debug) {
+  const menuButtons = findOverflowMenuButtons();
+  if (debug) {
+    debug.menuCandidates = menuButtons.length;
+    debug.menuButtonLabels = menuButtons
+      .map((button) => normalizeLabel(readNodeText(button)))
+      .filter(Boolean)
+      .slice(0, 12);
+  }
+  if (DEBUG) {
+    debugLog("overflow menu candidates", menuButtons.length);
+  }
+  for (const button of menuButtons) {
+    if (!isElementVisible(button)) continue;
+    closeOpenMenus();
+    button.scrollIntoView({ block: "center", inline: "center" });
+    button.click();
+    const menu = await waitForMenuPopup(1200);
+    if (!menu) continue;
+    const item = findTranscriptMenuItem(menu, debug);
+    if (item) {
+      if (debug) {
+        debug.menuClicked = normalizeLabel(readNodeText(item));
+      }
+      item.click();
+      await sleep(120);
+      return true;
+    }
+    closeOpenMenus();
+  }
+  return false;
+}
+
+function findTranscriptMenuItem(root, debug) {
+  const items = Array.from(
+    root.querySelectorAll(
+      "ytd-menu-service-item-renderer, tp-yt-paper-item, ytd-menu-navigation-item-renderer"
+    )
+  );
+  const labels = [];
+  for (const item of items) {
+    const label = normalizeLabel(readNodeText(item));
+    if (label) {
+      labels.push(label);
+    }
+    if (isTranscriptActionLabel(label)) {
+      if (debug) {
+        debug.menuItems = labels.slice(0, 12);
+      }
+      return item;
+    }
+  }
+  if (debug) {
+    debug.menuItems = labels.slice(0, 12);
+  }
+  return null;
+}
+
+function waitForTranscriptPanel(timeoutMs) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const timer = setInterval(() => {
+      if (isTranscriptPanelOpen()) {
+        clearInterval(timer);
+        resolve(true);
+        return;
+      }
+      if (Date.now() - start >= timeoutMs) {
+        clearInterval(timer);
+        resolve(false);
+      }
+    }, 150);
+  });
+}
+
+function waitForMenuPopup(timeoutMs) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const timer = setInterval(() => {
+      const dropdown =
+        document.querySelector("tp-yt-iron-dropdown[opened]") ||
+        document.querySelector("tp-yt-iron-dropdown[aria-hidden='false']");
+      const popupFromDropdown =
+        dropdown?.querySelector("ytd-menu-popup-renderer") ||
+        dropdown?.querySelector("tp-yt-paper-listbox");
+      const popup =
+        popupFromDropdown ||
+        document.querySelector("ytd-popup-container ytd-menu-popup-renderer") ||
+        document.querySelector("ytd-menu-popup-renderer") ||
+        document.querySelector("tp-yt-paper-listbox");
+      if (popup && !isNodeHidden(popup)) {
+        clearInterval(timer);
+        resolve(popup);
+        return;
+      }
+      if (Date.now() - start >= timeoutMs) {
+        clearInterval(timer);
+        resolve(null);
+      }
+    }, 120);
+  });
+}
+
+function closeOpenMenus() {
+  document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  document.body.dispatchEvent(new KeyboardEvent("keyup", { key: "Escape" }));
+}
+
+function expandDescriptionIfNeeded() {
+  const container =
+    document.querySelector("ytd-watch-metadata") ||
+    document.querySelector("#description");
+  if (!container) return;
+  const expandSelectors = [
+    "button#expand",
+    "tp-yt-paper-button#expand",
+    "yt-button-shape button#expand",
+    'button[aria-label*="Show more"]',
+    'button[aria-label*="展开"]',
+    'button[aria-label*="更多"]',
+  ];
+  for (const selector of expandSelectors) {
+    const button = container.querySelector(selector);
+    if (!button || !isElementVisible(button)) continue;
+    if (button.getAttribute("aria-expanded") === "true") continue;
+    button.click();
+    return;
+  }
+}
+
+function findDirectTranscriptButtons() {
+  const scopes = [
+    document.querySelector("ytd-video-description-transcript-section-renderer"),
+    document.querySelector("ytd-watch-metadata"),
+    document.querySelector("#description"),
+    document,
+  ].filter(Boolean);
+  const selector =
+    "button, tp-yt-paper-button, ytd-button-renderer button, yt-button-shape button, a";
+  const buttons = [];
+  for (const scope of scopes) {
+    const list = Array.from(scope.querySelectorAll(selector));
+    for (const button of list) {
+      if (!isElementVisible(button)) continue;
+      buttons.push(button);
+    }
+    if (buttons.length > 0) {
+      const matched = buttons.filter((button) =>
+        isTranscriptActionLabel(readNodeText(button))
+      );
+      if (matched.length > 0) {
+        return dedupeElements(matched);
+      }
+    }
+  }
+  return dedupeElements(buttons);
+}
+
+function findOverflowMenuButtons() {
+  const scopes = [
+    document.querySelector("ytd-watch-metadata"),
+    document.querySelector("#description"),
+    document,
+  ].filter(Boolean);
+  const selectors = [
+    "#description ytd-menu-renderer button",
+    "ytd-watch-metadata ytd-menu-renderer button",
+    "ytd-menu-renderer button",
+  ];
+  const candidates = [];
+  for (const scope of scopes) {
+    for (const selector of selectors) {
+      const buttons = Array.from(scope.querySelectorAll(selector));
+      for (const button of buttons) {
+        if (!isElementVisible(button)) continue;
+        if (button.closest("ytd-player")) continue;
+        if (button.closest("#movie_player")) continue;
+        candidates.push(button);
+      }
+    }
+  }
+  const scored = candidates.filter((button) => {
+    const label = readNodeText(button);
+    return isMenuButtonLabel(label);
+  });
+  return dedupeElements(scored.length > 0 ? scored : candidates);
+}
+
+function dedupeElements(elements) {
+  const seen = new Set();
+  const out = [];
+  for (const element of elements) {
+    const key =
+      element.getAttribute("aria-label") ||
+      element.getAttribute("title") ||
+      element.id ||
+      element.outerHTML;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(element);
+  }
+  return out;
+}
+
+function isTranscriptActionLabel(text) {
+  const label = normalizeLabel(text);
+  if (!label) return false;
+  if (label.includes("subtitle") || label.includes("captions")) {
+    return false;
+  }
+  if (label.includes("transcript")) {
+    return true;
+  }
+  return [
+    "内容转文字",
+    "內容轉文字",
+    "显示转录",
+    "显示文字稿",
+    "显示文字记录",
+    "转录",
+    "转写",
+    "轉寫",
+    "文字稿",
+    "文字记录",
+    "文字紀錄",
+  ].some((keyword) => label.includes(keyword));
+}
+
+function isMenuButtonLabel(text) {
+  const label = normalizeLabel(text);
+  if (!label) return false;
+  return (
+    label.includes("more") ||
+    label.includes("options") ||
+    label.includes("menu") ||
+    label.includes("更多") ||
+    label.includes("操作")
+  );
+}
+
+function readNodeText(node) {
+  if (!node) return "";
+  return (
+    node.getAttribute?.("aria-label") ||
+    node.getAttribute?.("title") ||
+    node.getAttribute?.("data-tooltip-text") ||
+    node.textContent ||
+    ""
+  );
+}
+
+function readVisibleVideoTitle() {
+  const selectors = [
+    "ytd-watch-metadata h1 yt-formatted-string",
+    "ytd-watch-metadata #title h1",
+    "h1.title yt-formatted-string",
+    "h1.ytd-watch-metadata",
+  ];
+  for (const selector of selectors) {
+    const node = document.querySelector(selector);
+    const text = normalizeVideoTitle(String(node?.textContent || "").trim());
+    if (text) return text;
+  }
+  const expectedVideoId = extractVideoIdFromLocation(window.location.href);
+  const response = readPlayerResponse(expectedVideoId) || readPlayerResponse();
+  const responseTitle = normalizeVideoTitle(
+    String(response?.videoDetails?.title || "").trim()
+  );
+  if (responseTitle) return responseTitle;
+  return normalizeVideoTitle(String(document.title || ""));
+}
+
+function isNodeHidden(node) {
+  if (!node) return true;
+  if (node.hasAttribute?.("hidden")) return true;
+  const ariaHidden = String(node.getAttribute?.("aria-hidden") || "").toLowerCase();
+  if (ariaHidden === "true") return true;
+  return false;
+}
+
+function normalizeLabel(text) {
+  return String(text || "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function normalizeVideoTitle(text) {
+  return String(text || "")
+    .replace(/\s*-\s*youtube\s*$/i, "")
+    .trim();
+}
+
+function normalizeTranscriptText(text) {
+  return String(text || "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeTranscriptTimestamp(timestamp) {
+  const value = String(timestamp || "").replace(/\s+/g, " ").trim();
+  if (!value) return "";
+  const match = value.match(/(\d{1,2}:)?\d{1,2}:\d{2}/);
+  return match ? match[0] : value;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

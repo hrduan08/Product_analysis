@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "VoiceInsight - YouTube Subtitles & Transcript Downloader"
+  },
+  "extensionDescription": {
+    "message": "Easily download subtitles & transcript while browsing YouTube videos."
+  },
+  "actionTitle": {
+    "message": "Download Subtitles"
+  }
+}
