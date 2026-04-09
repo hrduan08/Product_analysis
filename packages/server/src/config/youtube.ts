@@ -42,12 +42,3 @@ export const youtubeConfig = {
   searchUnitsPerCall: 100,
   videoUnitsPerCall: 1
 } as const;
-
-// 兼容旧逻辑：确保 `YOUTUBE_API_KEY` 仍然存在，以免第三方依赖 `getEnv` 校验。
-if (!process.env.YOUTUBE_API_KEY && process.env.YOUTUBE_API_KEYS) {
-  // 回写首个 Key 供 legacy 代码（若仍引用 getEnv('YOUTUBE_API_KEY')）使用。
-  process.env.YOUTUBE_API_KEY = youtubeConfig.defaultApiKey;
-} else {
-  // 若仅设置了单个变量，也写入 default，以确保后续模块可重复使用。
-  process.env.YOUTUBE_API_KEYS = apiKeys.join(',');
-}

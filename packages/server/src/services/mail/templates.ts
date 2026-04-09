@@ -33,33 +33,6 @@ export function buildTrialExpiringEmail(params: { email: string; expiresAt: Date
 }
 
 /**
- * 构建订阅激活成功通知邮件。
- */
-export function buildSubscriptionActivatedEmail(params: { email: string; planName: string; periodEnd: Date }): { subject: string; html: string; text: string } { // 返回订阅成功邮件内容。
-  const formattedDate = params.periodEnd.toLocaleString("zh-CN", { hour12: false }); // 格式化当前周期结束时间。
-  const billingUrl = `${APP_ORIGIN.replace(/\/$/, "")}/app/subscription`; // 构建查看账单链接。
-  const subject = "Product Insight - 订阅已激活"; // 邮件主题。
-  const html = `
-    <div style="font-family:Inter,Segoe UI,sans-serif;font-size:15px;color:#1f2937;line-height:1.6;">
-      <h2 style="margin-bottom:12px;">订阅激活成功</h2>
-      <p>感谢升级 ${params.planName} 套餐，您的高级功能已解锁。</p>
-      <p>当前计费周期将在 <strong>${formattedDate}</strong> 结束，期间您可随时在账单中心查看明细。</p>
-      <p style="margin:24px 0;">
-        <a href="${billingUrl}" style="display:inline-block;padding:12px 28px;background:#2563eb;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">查看订阅详情</a>
-      </p>
-      <p style="margin-top:32px;color:#6b7280;font-size:13px;">如对账单有疑问，可直接回复本邮件联系我们。</p>
-    </div>
-  `; // HTML 内容。
-  const text = [
-    "订阅激活成功",
-    `感谢升级 ${params.planName} 套餐，您的高级功能已解锁。`,
-    `当前计费周期将在 ${formattedDate} 结束，可前往 ${billingUrl} 查看账单详情。`,
-    "如对账单有疑问，可直接回复本邮件联系我们。"
-  ].join("\n"); // 文本内容。
-  return { subject, html, text }; // 返回构建好的模板。
-}
-
-/**
  * 构建订阅续费提醒邮件。
  */
 export function buildSubscriptionRenewalReminderEmail(params: { email: string; planName: string; periodEnd: Date }): { subject: string; html: string; text: string } { // 返回续费提醒邮件内容。

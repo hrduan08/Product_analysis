@@ -1,6 +1,4 @@
-import { addDays, isAfter } from 'date-fns';
 import { format } from 'date-fns';
-import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import { z } from 'zod';
 
 import { prisma } from '../db/prisma.js';
@@ -8,7 +6,6 @@ import { createHttpError } from '../utils/http-error.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import {
   filterEnabledProviderPlatforms,
-  getEnabledProviderPlatforms,
   getSelectableSearchPlatforms
 } from '../config/platforms.js';
 import type { Platform } from '../types/search.js';
@@ -17,14 +14,31 @@ import { buildFeishuTextPayload, sendFeishuWebhookMessage } from './feishu.js';
 
 const DEFAULT_PLATFORMS: string[] = ['youtube'];
 const SUPPORTED_SELECTION_PLATFORMS = ['youtube', 'reddit', 'x', 'facebook'] as const;
-const MAX_KEYWORDS = 3;
-const MAX_SLOTS = 3;
+const MAX_REDDIT_COMMUNITIES = 3;
+const MAX_REDDIT_KEYWORDS = 2;
+const MAX_YOUTUBE_KEYWORDS = 2;
 const DEFAULT_TIMEZONE = 'Asia/Shanghai';
-const SLOT_JITTER_SECONDS = Math.max(Number(process.env.USER_SEARCH_SLOT_JITTER ?? '30'), 0);
+const AUTO_SCHEDULE_JITTER_SECONDS = Math.max(Number(process.env.USER_SEARCH_AUTO_JITTER_SECONDS ?? '120'), 0);
+const AUTO_REDDIT_INTERVAL_MINUTES = Math.max(
+  Number(process.env.USER_SEARCH_REDDIT_INTERVAL_MINUTES ?? '720'),
+  1
+);
+const AUTO_YOUTUBE_INTERVAL_MINUTES = Math.max(
+  Number(process.env.USER_SEARCH_YOUTUBE_INTERVAL_MINUTES ?? '1440'),
+  1
+);
+const AUTO_SOON_MIN_SECONDS = Math.max(
+  Number(process.env.USER_SEARCH_AUTO_SOON_MIN_SECONDS ?? '30'),
+  0
+);
+const AUTO_SOON_MAX_SECONDS = Math.max(
+  Number(process.env.USER_SEARCH_AUTO_SOON_MAX_SECONDS ?? '180'),
+  AUTO_SOON_MIN_SECONDS
+);
 
 export const SEARCH_CONFIG_DEFAULT_TIMEZONE = DEFAULT_TIMEZONE;
 
-const slotRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+const redditCommunityNameRegex = /^[A-Za-z0-9_]{2,32}$/;
 
 const patchSchema = z
   .object({
@@ -33,13 +47,14 @@ const patchSchema = z
       .min(1)
       .max(SUPPORTED_SELECTION_PLATFORMS.length)
       .optional(),
-    keywords: z
+    redditCommunities: z.array(z.string().trim().min(2).max(200)).max(MAX_REDDIT_COMMUNITIES).optional(),
+    redditKeywords: z
       .array(z.string().trim().min(2, '关键词至少 2 个字符').max(60, '关键词长度请控制在 60 字内'))
-      .max(MAX_KEYWORDS)
+      .max(MAX_REDDIT_KEYWORDS)
       .optional(),
-    slots: z
-      .array(z.string().refine((value) => slotRegex.test(value), '时间格式必须为 HH:mm'))
-      .max(MAX_SLOTS)
+    youtubeKeywords: z
+      .array(z.string().trim().min(2, '关键词至少 2 个字符').max(60, '关键词长度请控制在 60 字内'))
+      .max(MAX_YOUTUBE_KEYWORDS)
       .optional(),
     notifyEmail: z.string().email().optional(),
     timezone: z.string().min(2).max(60).optional(),
@@ -67,8 +82,9 @@ export type SearchConfigPatchInput = z.input<typeof patchSchema>;
 export type UserSearchConfigRecord = {
   userId: string;
   platforms: string[];
-  keywords: string[];
-  slots: string[];
+  redditCommunities: string[];
+  redditKeywords: string[];
+  youtubeKeywords: string[];
   notifyEmail: string;
   timezone: string;
   notifyChannels: string[];
@@ -76,13 +92,15 @@ export type UserSearchConfigRecord = {
   feishuStatus: string | null;
   feishuLastTestedAt: Date | null;
   nextRunAt: Date | null;
-  lastRunAt: Date | null;
+  redditLastRunAt: Date | null;
+  youtubeLastRunAt: Date | null;
   lastNotifiedAt: Date | null;
   createdAt: Date | null;
   updatedAt: Date | null;
   limits: {
-    maxKeywords: number;
-    maxSlots: number;
+    maxRedditCommunities: number;
+    maxRedditKeywords: number;
+    maxYoutubeKeywords: number;
   };
 };
 
@@ -94,6 +112,40 @@ export function getSelectablePlatforms(): string[] {
 
 export function getSupportedProviderPlatforms(platforms: string[]): Platform[] {
   return filterEnabledProviderPlatforms(platforms);
+}
+
+export function resolveRedditCommunityName(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const url = new URL(trimmed);
+    const parts = url.pathname.split('/').filter(Boolean);
+    const rIndex = parts.findIndex((item) => item.toLowerCase() === 'r');
+    if (rIndex >= 0 && parts[rIndex + 1]) {
+      const name = parts[rIndex + 1].trim();
+      return redditCommunityNameRegex.test(name) ? name : null;
+    }
+  } catch {
+    // not URL, fallback to short patterns
+  }
+
+  const shortMatched = trimmed.match(/^r\/([A-Za-z0-9_]{2,32})$/i);
+  if (shortMatched?.[1]) {
+    return shortMatched[1];
+  }
+
+  return redditCommunityNameRegex.test(trimmed) ? trimmed : null;
+}
+
+function normalizeRedditCommunityUrl(input: string): string | null {
+  const name = resolveRedditCommunityName(input);
+  if (!name) {
+    return null;
+  }
+  return `https://www.reddit.com/r/${name}/`;
 }
 
 export async function getUserSearchConfig(userId: string): Promise<UserSearchConfigRecord> {
@@ -116,8 +168,9 @@ export async function getUserSearchConfig(userId: string): Promise<UserSearchCon
     return {
       userId,
       platforms: [...DEFAULT_PLATFORMS],
-      keywords: [],
-      slots: [],
+      redditCommunities: [],
+      redditKeywords: [],
+      youtubeKeywords: [],
       notifyEmail: user.email,
       timezone: DEFAULT_TIMEZONE,
       notifyChannels: ['feishu'],
@@ -125,28 +178,25 @@ export async function getUserSearchConfig(userId: string): Promise<UserSearchCon
       feishuStatus: null,
       feishuLastTestedAt: null,
       nextRunAt: null,
-      lastRunAt: null,
+      redditLastRunAt: null,
+      youtubeLastRunAt: null,
       lastNotifiedAt: null,
       createdAt: null,
       updatedAt: null,
       limits: {
-        maxKeywords: tierLimits.maxKeywords,
-        maxSlots: tierLimits.maxSlots
+        maxRedditCommunities: tierLimits.maxRedditCommunities,
+        maxRedditKeywords: tierLimits.maxRedditKeywords,
+        maxYoutubeKeywords: tierLimits.maxYoutubeKeywords
       }
     };
   }
 
   const record = user.searchConfig;
-  const keywords = clampList(record.keywords, tierLimits.maxKeywords);
-  const slots = clampList(record.slots, tierLimits.maxSlots);
-  return mapRecordToDto(
-    {
-      ...record,
-      keywords,
-      slots
-    },
-    tierLimits
-  );
+  return mapRecordToDto(record, {
+    maxRedditCommunities: tierLimits.maxRedditCommunities,
+    maxRedditKeywords: tierLimits.maxRedditKeywords,
+    maxYoutubeKeywords: tierLimits.maxYoutubeKeywords
+  });
 }
 
 export async function updateUserSearchConfig(
@@ -167,22 +217,45 @@ export async function updateUserSearchConfig(
   const existing = user.searchConfig;
   const tierLimits = getTierLimitsByStatus(user.status as Prisma.UserStatus);
 
-  if (tierLimits.maxKeywords === 0 || tierLimits.maxSlots === 0) {
+  if (tierLimits.maxRedditCommunities === 0 && tierLimits.maxYoutubeKeywords === 0) {
     throw createHttpError(403, '当前账号未开通定时搜索功能，请升级套餐后再试');
   }
 
-  if (payload.keywords && countDistinctKeywords(payload.keywords) > tierLimits.maxKeywords) {
-    throw createHttpError(400, `当前套餐最多支持 ${tierLimits.maxKeywords} 个关键词`);
+  if (
+    payload.youtubeKeywords &&
+    countDistinctKeywords(payload.youtubeKeywords) > tierLimits.maxYoutubeKeywords
+  ) {
+    throw createHttpError(400, `当前套餐最多支持 ${tierLimits.maxYoutubeKeywords} 个 YouTube 关键词`);
   }
 
-  if (payload.slots && payload.slots.length > tierLimits.maxSlots) {
-    throw createHttpError(400, `当前套餐最多支持 ${tierLimits.maxSlots} 个执行时间`);
+  if (
+    payload.redditKeywords &&
+    countDistinctKeywords(payload.redditKeywords) > tierLimits.maxRedditKeywords
+  ) {
+    throw createHttpError(400, `当前套餐最多支持 ${tierLimits.maxRedditKeywords} 个 Reddit 关键词`);
+  }
+
+  if (
+    payload.redditCommunities &&
+    countDistinctRedditCommunities(payload.redditCommunities) > tierLimits.maxRedditCommunities
+  ) {
+    throw createHttpError(400, `当前套餐最多支持 ${tierLimits.maxRedditCommunities} 个 Reddit 社区`);
   }
 
   const platforms = normalizePlatforms(payload.platforms ?? existing?.platforms ?? DEFAULT_PLATFORMS);
-  const keywords = normalizeKeywords(payload.keywords ?? existing?.keywords ?? [], tierLimits.maxKeywords);
-  const rawSlots = payload.slots ?? existing?.slots ?? [];
-  const slots = normalizeSlots(rawSlots, tierLimits.maxSlots);
+  const redditCommunities = normalizeRedditCommunities(
+    payload.redditCommunities ?? existing?.reddit_communities ?? [],
+    tierLimits.maxRedditCommunities
+  );
+  const redditKeywords = normalizeKeywords(
+    payload.redditKeywords ?? existing?.reddit_keywords ?? [],
+    tierLimits.maxRedditKeywords
+  );
+  const youtubeKeywords = normalizeKeywords(
+    payload.youtubeKeywords ?? existing?.youtube_keywords ?? [],
+    tierLimits.maxYoutubeKeywords
+  );
+
   const timezone = payload.timezone ?? existing?.timezone ?? DEFAULT_TIMEZONE;
   const notifyEmail = payload.notifyEmail ?? existing?.notify_email ?? user.email;
   const notifyChannels = normalizeNotifyChannels(payload.notifyChannels ?? existing?.notify_channels ?? ['feishu']);
@@ -192,25 +265,36 @@ export async function updateUserSearchConfig(
       : existing?.feishu_webhook ?? '';
   const feishuWebhook = webhookInput;
 
-  const shouldResetSchedule =
+  const effectiveRedditCommunities = platforms.includes('reddit') ? redditCommunities : [];
+  const effectiveRedditKeywords = platforms.includes('reddit') ? redditKeywords : [];
+  const effectiveYoutubeKeywords = platforms.includes('youtube') ? youtubeKeywords : [];
+
+  const webhookChanged =
+    payload.feishuWebhook !== undefined && payload.feishuWebhook !== existing?.feishu_webhook;
+
+  const configChangedForSchedule =
     !existing ||
-    payload.slots !== undefined ||
-    (payload.timezone !== undefined && payload.timezone !== existing?.timezone);
+    payload.platforms !== undefined ||
+    payload.redditCommunities !== undefined ||
+    payload.redditKeywords !== undefined ||
+    payload.youtubeKeywords !== undefined;
 
-  const webhookChanged = payload.feishuWebhook !== undefined && payload.feishuWebhook !== existing?.feishu_webhook;
-
-  const nextRunAt = computeNextRunAt(
-    slots,
-    timezone,
-    shouldResetSchedule ? null : existing?.next_run_at ?? undefined
-  );
+  const nextRunAt = computeNextAutoRunAt({
+    platforms,
+    redditCommunities: effectiveRedditCommunities,
+    youtubeKeywords: effectiveYoutubeKeywords,
+    redditLastRunAt: existing?.reddit_last_run_at ?? null,
+    youtubeLastRunAt: existing?.youtube_last_run_at ?? null,
+    forceSoon: configChangedForSchedule
+  });
 
   const record = await prisma.userSearchConfig.upsert({
     where: { user_id: userId },
     update: {
       platforms,
-      keywords,
-      slots,
+      reddit_communities: effectiveRedditCommunities,
+      reddit_keywords: effectiveRedditKeywords,
+      youtube_keywords: effectiveYoutubeKeywords,
       notify_email: notifyEmail,
       timezone,
       notify_channels: notifyChannels,
@@ -223,8 +307,9 @@ export async function updateUserSearchConfig(
     create: {
       user_id: userId,
       platforms,
-      keywords,
-      slots,
+      reddit_communities: effectiveRedditCommunities,
+      reddit_keywords: effectiveRedditKeywords,
+      youtube_keywords: effectiveYoutubeKeywords,
       notify_email: notifyEmail,
       timezone,
       notify_channels: notifyChannels,
@@ -233,27 +318,33 @@ export async function updateUserSearchConfig(
     }
   });
 
-  return mapRecordToDto(record, tierLimits);
+  return mapRecordToDto(record, {
+    maxRedditCommunities: tierLimits.maxRedditCommunities,
+    maxRedditKeywords: tierLimits.maxRedditKeywords,
+    maxYoutubeKeywords: tierLimits.maxYoutubeKeywords
+  });
 }
 
 type DueSearchConfig = Prisma.UserSearchConfigGetPayload<{
   select: {
     user_id: true;
     platforms: true;
-    keywords: true;
-    slots: true;
+    reddit_communities: true;
+    reddit_keywords: true;
+    youtube_keywords: true;
     notify_email: true;
     timezone: true;
     notify_channels: true;
     feishu_webhook: true;
     feishu_status: true;
     next_run_at: true;
-    last_run_at: true;
+    reddit_last_run_at: true;
+    youtube_last_run_at: true;
     last_notified_at: true;
     user: {
       select: {
-      email: true;
-      status: true;
+        email: true;
+        status: true;
       };
     };
   };
@@ -274,15 +365,17 @@ export async function listDueUserSearchConfigs(reference: Date): Promise<DueSear
     select: {
       user_id: true,
       platforms: true,
-      keywords: true,
-      slots: true,
+      reddit_communities: true,
+      reddit_keywords: true,
+      youtube_keywords: true,
       notify_email: true,
       timezone: true,
       notify_channels: true,
       feishu_webhook: true,
       feishu_status: true,
       next_run_at: true,
-      last_run_at: true,
+      reddit_last_run_at: true,
+      youtube_last_run_at: true,
       last_notified_at: true,
       user: {
         select: {
@@ -297,16 +390,25 @@ export async function listDueUserSearchConfigs(reference: Date): Promise<DueSear
 export async function updateExecutionMetadata(params: {
   userId: string;
   nextRunAt: Date | null;
-  lastRunAt: Date;
   lastNotifiedAt: Date | null;
+  redditLastRunAt?: Date | null;
+  youtubeLastRunAt?: Date | null;
 }): Promise<void> {
+  const data: Prisma.UserSearchConfigUpdateInput = {
+    next_run_at: params.nextRunAt,
+    last_notified_at: params.lastNotifiedAt
+  };
+
+  if (params.redditLastRunAt !== undefined) {
+    data.reddit_last_run_at = params.redditLastRunAt;
+  }
+  if (params.youtubeLastRunAt !== undefined) {
+    data.youtube_last_run_at = params.youtubeLastRunAt;
+  }
+
   await prisma.userSearchConfig.update({
     where: { user_id: params.userId },
-    data: {
-      next_run_at: params.nextRunAt,
-      last_run_at: params.lastRunAt,
-      last_notified_at: params.lastNotifiedAt
-    }
+    data
   });
 }
 
@@ -331,7 +433,7 @@ function normalizePlatforms(source: string[]): string[] {
   return filtered;
 }
 
-function normalizeKeywords(source: string[], limit = MAX_KEYWORDS): string[] {
+function normalizeKeywords(source: string[], limit: number): string[] {
   if (limit <= 0) return [];
   const seen = new Set<string>();
   const result: string[] = [];
@@ -347,104 +449,137 @@ function normalizeKeywords(source: string[], limit = MAX_KEYWORDS): string[] {
   return result;
 }
 
-function normalizeSlots(source: string[], limit = MAX_SLOTS): string[] {
-  if (limit <= 0) return [];
+function normalizeRedditCommunities(source: string[], limit: number): string[] {
+  if (limit <= 0) {
+    return [];
+  }
   const seen = new Set<string>();
-  const normalized = source
-    .map((item) => item.trim())
-    .filter((item) => slotRegex.test(item))
-    .map((item) => {
-      const [hour, minute] = item.split(':');
-      return `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
-    })
-    .filter((item) => {
-      if (seen.has(item)) {
-        return false;
-      }
-      seen.add(item);
-      return true;
-    })
-    .sort();
-  return normalized.slice(0, limit);
+  const result: string[] = [];
+  for (const item of source) {
+    const normalized = normalizeRedditCommunityUrl(item);
+    if (!normalized) {
+      continue;
+    }
+    const name = resolveRedditCommunityName(normalized);
+    if (!name) {
+      continue;
+    }
+    const dedupeKey = name.toLowerCase();
+    if (seen.has(dedupeKey)) {
+      continue;
+    }
+    seen.add(dedupeKey);
+    result.push(normalized);
+    if (result.length >= limit) {
+      break;
+    }
+  }
+  return result;
 }
 
-export function computeNextRunAt(
-  slots: string[],
-  timezone: string,
-  previous?: Date | null
-): Date | null {
-  if (!slots.length) {
+export function computeNextAutoRunAt(params: {
+  platforms: string[];
+  redditCommunities: string[];
+  youtubeKeywords: string[];
+  redditLastRunAt?: Date | null;
+  youtubeLastRunAt?: Date | null;
+  forceSoon?: boolean;
+  now?: Date;
+}): Date | null {
+  const now = params.now ?? new Date();
+
+  if (params.forceSoon) {
+    const offset = randomBetween(AUTO_SOON_MIN_SECONDS, AUTO_SOON_MAX_SECONDS);
+    return new Date(now.getTime() + offset * 1000);
+  }
+
+  const candidates: Date[] = [];
+
+  if (params.platforms.includes('reddit') && params.redditCommunities.length > 0) {
+    const base = params.redditLastRunAt ?? now;
+    candidates.push(
+      applyJitter(
+        new Date(base.getTime() + AUTO_REDDIT_INTERVAL_MINUTES * 60 * 1000),
+        AUTO_SCHEDULE_JITTER_SECONDS
+      )
+    );
+  }
+
+  if (params.platforms.includes('youtube') && params.youtubeKeywords.length > 0) {
+    const base = params.youtubeLastRunAt ?? now;
+    candidates.push(
+      applyJitter(
+        new Date(base.getTime() + AUTO_YOUTUBE_INTERVAL_MINUTES * 60 * 1000),
+        AUTO_SCHEDULE_JITTER_SECONDS
+      )
+    );
+  }
+
+  if (candidates.length === 0) {
     return null;
   }
 
-  const now = new Date();
-  const base = previous && isAfter(previous, now) ? previous : now;
-  const zonedBase = toZonedTime(base, timezone);
-  const today = format(zonedBase, 'yyyy-MM-dd');
-
-  const sortedSlots = [...slots].sort();
-
-  for (const slot of sortedSlots) {
-    const candidate = fromZonedTime(`${today}T${slot}:00`, timezone);
-    if (candidate > now) {
-      return applyJitter(candidate, SLOT_JITTER_SECONDS);
-    }
-  }
-
-  const nextDay = addDays(zonedBase, 1);
-  const nextDayString = format(nextDay, 'yyyy-MM-dd');
-  return applyJitter(fromZonedTime(`${nextDayString}T${sortedSlots[0]}:00`, timezone), SLOT_JITTER_SECONDS);
+  return candidates.sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
 }
 
 function mapRecordToDto(
   record: {
-  user_id: string;
-  platforms: string[];
-  keywords: string[];
-  slots: string[];
-  notify_email: string;
-  timezone: string;
-  notify_channels: string[];
-  feishu_webhook: string | null;
-  feishu_status: string | null;
-  feishu_last_tested_at: Date | null;
-  next_run_at: Date | null;
-  last_run_at: Date | null;
-  last_notified_at: Date | null;
-  created_at: Date;
-  updated_at: Date;
-},
-  limits?: { maxKeywords: number; maxSlots: number }
+    user_id: string;
+    platforms: string[];
+    reddit_communities: string[];
+    reddit_keywords: string[];
+    youtube_keywords: string[];
+    notify_email: string;
+    timezone: string;
+    notify_channels: string[];
+    feishu_webhook: string | null;
+    feishu_status: string | null;
+    feishu_last_tested_at: Date | null;
+    next_run_at: Date | null;
+    reddit_last_run_at: Date | null;
+    youtube_last_run_at: Date | null;
+    last_notified_at: Date | null;
+    created_at: Date;
+    updated_at: Date;
+  },
+  limits: {
+    maxRedditCommunities: number;
+    maxRedditKeywords: number;
+    maxYoutubeKeywords: number;
+  }
 ): UserSearchConfigRecord {
   const safePlatforms = filterEnabledProviderPlatforms(record.platforms);
+
+  const youtubeKeywords = normalizeKeywords(record.youtube_keywords, limits.maxYoutubeKeywords);
+  const redditKeywords = normalizeKeywords(record.reddit_keywords, limits.maxRedditKeywords);
+  const redditCommunities = normalizeRedditCommunities(
+    record.reddit_communities,
+    limits.maxRedditCommunities
+  );
+
   return {
     userId: record.user_id,
     platforms: safePlatforms.length > 0 ? [...safePlatforms] : [...DEFAULT_PLATFORMS],
-    keywords: [...record.keywords],
-    slots: [...record.slots],
+    redditCommunities,
+    redditKeywords,
+    youtubeKeywords,
     notifyEmail: record.notify_email,
     timezone: record.timezone,
-    notifyChannels: record.notify_channels && record.notify_channels.length > 0 ? [...record.notify_channels] : ['feishu'],
+    notifyChannels:
+      record.notify_channels && record.notify_channels.length > 0
+        ? [...record.notify_channels]
+        : ['feishu'],
     feishuWebhook: record.feishu_webhook ?? '',
     feishuStatus: record.feishu_status,
     feishuLastTestedAt: record.feishu_last_tested_at,
     nextRunAt: record.next_run_at,
-    lastRunAt: record.last_run_at,
+    redditLastRunAt: record.reddit_last_run_at,
+    youtubeLastRunAt: record.youtube_last_run_at,
     lastNotifiedAt: record.last_notified_at,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
-    limits: limits ?? { maxKeywords: MAX_KEYWORDS, maxSlots: MAX_SLOTS }
+    limits
   };
-}
-
-function clampList<T>(source: T[], limit: number): T[] {
-  if (limit <= 0) {
-    return [];
-  }
-  if (source.length <= limit) {
-    return [...source];
-  }
-  return source.slice(0, limit);
 }
 
 function countDistinctKeywords(values: string[]): number {
@@ -453,6 +588,16 @@ function countDistinctKeywords(values: string[]): number {
     const trimmed = item.trim();
     if (!trimmed) continue;
     seen.add(trimmed.toLowerCase());
+  }
+  return seen.size;
+}
+
+function countDistinctRedditCommunities(values: string[]): number {
+  const seen = new Set<string>();
+  for (const item of values) {
+    const name = resolveRedditCommunityName(item);
+    if (!name) continue;
+    seen.add(name.toLowerCase());
   }
   return seen.size;
 }
@@ -466,6 +611,13 @@ function applyJitter(date: Date, maxSeconds: number): Date {
     return date;
   }
   return new Date(date.getTime() + jitterSeconds * 1000);
+}
+
+function randomBetween(min: number, max: number): number {
+  if (max <= min) {
+    return min;
+  }
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 function normalizeNotifyChannels(values: string[]): string[] {

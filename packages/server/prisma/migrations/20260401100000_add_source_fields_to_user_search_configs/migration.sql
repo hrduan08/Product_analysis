@@ -1,0 +1,6 @@
+ALTER TABLE "user_search_configs"
+  ADD COLUMN IF NOT EXISTS "reddit_communities" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  ADD COLUMN IF NOT EXISTS "reddit_keywords" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  ADD COLUMN IF NOT EXISTS "youtube_keywords" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  ADD COLUMN IF NOT EXISTS "reddit_last_run_at" TIMESTAMPTZ(6),
+  ADD COLUMN IF NOT EXISTS "youtube_last_run_at" TIMESTAMPTZ(6);

@@ -11,7 +11,7 @@ export function isRedditConfigured(): boolean {
   return REDDIT_ENV_KEYS.every((key) => Boolean(process.env[key]));
 }
 
-export function getEnabledProviderPlatforms(): Platform[] {
+function getEnabledProviderPlatforms(): Platform[] {
   return isRedditConfigured() ? ['youtube', 'reddit'] : ['youtube'];
 }
 

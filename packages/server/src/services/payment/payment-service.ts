@@ -360,11 +360,3 @@ export async function markOrderExpired(orderId: string, reason = 'ORDER_EXPIRED'
     console.error('[alert] 记录支付过期告警失败', alertError);
   }
 }
-
-export async function queryPaymentStatus(orderId: string): Promise<PaymentOrder & { plan: Plan }> {
-  const order = await prisma.paymentOrder.findUnique({ where: { id: orderId }, include: { plan: true } });
-  if (!order) {
-    throw new Error('订单不存在');
-  }
-  return order;
-}

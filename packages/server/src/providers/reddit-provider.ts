@@ -2,25 +2,33 @@ import type { SearchParams, SearchProvider, SearchResult } from '../types/search
 import { RedditTokenManager } from '../auth/reddit-token-manager.js';
 
 const API_BASE = 'https://oauth.reddit.com';
+const SUBREDDIT_QUERY_PREFIX = /^subreddit:([A-Za-z0-9_]+)$/i;
 
 export class RedditProvider implements SearchProvider {
   private readonly tokenManager = new RedditTokenManager();
 
-  async search({ query, cursor, limit = 10 }: SearchParams): Promise<SearchResult> {
+  async search({ query, cursor, limit = 10, subreddit }: SearchParams): Promise<SearchResult> {
     const { token, userAgent } = await this.tokenManager.getToken();
+    const normalizedSubreddit = normalizeSubredditInput(subreddit ?? query);
 
+    let endpoint = '/search';
     const params = new URLSearchParams({
-      q: query,
-      sort: 'new',
-      type: 'link',
       limit: String(limit)
     });
 
-    if (cursor) {
-      params.append('after', cursor);
+    if (normalizedSubreddit) {
+      endpoint = `/r/${normalizedSubreddit}/new`;
+    } else {
+      params.set('q', query);
+      params.set('sort', 'new');
+      params.set('type', 'link');
     }
 
-    const response = await fetch(`${API_BASE}/search?${params.toString()}`, {
+    if (cursor && cursor.trim().length > 0) {
+      params.set('after', cursor);
+    }
+
+    const response = await fetch(`${API_BASE}${endpoint}?${params.toString()}`, {
       headers: {
         Authorization: `Bearer ${token}`,
         'User-Agent': userAgent
@@ -59,6 +67,7 @@ export class RedditProvider implements SearchProvider {
     const children: any[] = data?.data?.children ?? [];
     const now = new Date().toISOString();
 
+    const sourceKeyword = normalizedSubreddit ? `r/${normalizedSubreddit}` : query;
     const items = children
       .map((child) => child?.data)
       .filter(Boolean)
@@ -72,7 +81,7 @@ export class RedditProvider implements SearchProvider {
 
         return {
           platform: 'reddit' as const,
-          keyword: query,
+          keyword: sourceKeyword,
           id: String(post.name),
           title: String(post.title ?? ''),
           author: String(post.author ?? 'unknown'),
@@ -84,6 +93,10 @@ export class RedditProvider implements SearchProvider {
           viewCount: null,
           score: typeof post.score === 'number' ? post.score : null,
           commentCount: typeof post.num_comments === 'number' ? post.num_comments : null,
+          description: typeof post.selftext === 'string' && post.selftext.length > 0 ? post.selftext : null,
+          tags: [post.link_flair_text, post.link_flair_richtext?.[0]?.e].filter(
+            (item): item is string => typeof item === 'string' && item.length > 0
+          ),
           labels: [String(post.subreddit ?? '')].filter(Boolean)
         };
       });
@@ -104,6 +117,39 @@ export class RedditProvider implements SearchProvider {
       }
     };
   }
+}
+
+function normalizeSubredditInput(value?: string): string | null {
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const prefixMatched = trimmed.match(SUBREDDIT_QUERY_PREFIX);
+  if (prefixMatched?.[1]) {
+    return prefixMatched[1];
+  }
+
+  try {
+    const url = new URL(trimmed);
+    const parts = url.pathname.split('/').filter(Boolean);
+    const idx = parts.findIndex((item) => item.toLowerCase() === 'r');
+    if (idx >= 0 && parts[idx + 1]) {
+      return parts[idx + 1];
+    }
+  } catch {
+    // ignore URL parse failure, continue raw pattern parse
+  }
+
+  const rMatched = trimmed.match(/^r\/([A-Za-z0-9_]+)$/i);
+  if (rMatched?.[1]) {
+    return rMatched[1];
+  }
+
+  return null;
 }
 
 function sanitizeThumbnail(value: unknown): string | null {

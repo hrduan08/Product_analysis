@@ -4,6 +4,7 @@ export type SearchParams = {
   query: string;
   cursor?: string;
   limit?: number;
+  subreddit?: string;
   relevanceLanguage?: string;
   regionCode?: string;
   order?: string;

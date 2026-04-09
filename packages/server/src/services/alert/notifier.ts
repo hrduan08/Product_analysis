@@ -26,7 +26,7 @@ const severityEmoji: Record<AlertSeverity, string> = {
   critical: '🚨'
 };
 
-export async function sendAlert(message: string, payload?: unknown, options?: SendAlertOptions): Promise<void> {
+async function sendAlert(message: string, payload?: unknown, options?: SendAlertOptions): Promise<void> {
   const emoji = options?.emoji ?? '⚠️';
   const hasFeishu = Boolean(feishuAlertWebhook);
 

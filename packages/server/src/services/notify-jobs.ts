@@ -1,15 +1,6 @@
 import type { JobStatus, Prisma } from '../generated/prisma/client.js';
 import { prisma } from '../db/prisma.js';
 
-export async function getLastSuccessfulJobRunAt(): Promise<Date | null> {
-  const job = await prisma.notifyJob.findFirst({
-    where: { process_status: 'success' },
-    orderBy: { run_at: 'desc' },
-    select: { run_at: true }
-  });
-  return job?.run_at ?? null;
-}
-
 type NotifyJobInput = {
   processStatus?: JobStatus;
   notifyStatus?: JobStatus;

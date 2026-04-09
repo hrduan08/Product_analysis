@@ -15,6 +15,7 @@ import searchRouter from "./routes/search.js"; // 引入搜索相关路由模块
 import searchConfigRouter from "./routes/search-config.js"; // 引入搜索配置路由。
 import feedbackRouter from "./routes/feedback.js";
 import taskHistoryRouter from "./routes/task-history.js";
+import youtubeTranscriptRouter from "./routes/youtube-transcript.js";
 import { errorHandler } from "./middlewares/error-handler.js"; // 引入统一错误处理中间件。
 
 const httpsProxy = process.env.HTTPS_PROXY ?? process.env.HTTP_PROXY; // 从环境变量读取代理地址（若存在）。
@@ -56,6 +57,7 @@ app.use("/api", searchRouter); // 将搜索路由挂载到 /api 前缀下。
 app.use("/api", searchConfigRouter); // 搜索配置相关接口。
 app.use("/api", feedbackRouter);
 app.use("/api", taskHistoryRouter);
+app.use("/api", youtubeTranscriptRouter);
 
 app.use(errorHandler); // 注册统一错误处理中间件。
 

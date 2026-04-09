@@ -1,9 +1,7 @@
 import { resolveProvider } from '../providers/index.js';
-import { cronConfig } from '../config/cron.js';
 import { upsertFeedbackItems, upsertUserFeedbackItems } from '../services/feedback-store.js';
-import type { Platform } from '../types/search.js';
 import { YoutubeRateLimitError } from '../services/youtube/quota-manager.js';
-import type { FeedbackItem } from '../types/search.js';
+import type { FeedbackItem, Platform } from '../types/search.js';
 
 type SyncStat = {
   keyword: string;
@@ -13,6 +11,7 @@ type SyncStat = {
   updated: number;
   userCreated?: number;
   userUpdated?: number;
+  userCreatedIds?: string[];
   userProcessedIds?: string[];
   success: boolean;
   error?: string;
@@ -30,9 +29,9 @@ export type KeywordSyncResult = {
   finishedAt: Date;
 };
 
-type KeywordSyncOptions = {
-  keywords?: readonly string[];
-  platforms?: readonly Platform[];
+export type KeywordSyncOptions = {
+  keywords: readonly string[];
+  platforms: readonly Platform[];
   fetchLimit?: number;
   logLabel?: string;
   userId?: string;
@@ -44,23 +43,14 @@ type KeywordSyncOptions = {
   maxPages?: number;
 };
 
-export async function runKeywordSync(options?: KeywordSyncOptions): Promise<KeywordSyncResult> {
-  const keywords = options?.keywords ? [...options.keywords] : [...cronConfig.keywords];
-  const platforms = options?.platforms ? [...options.platforms] : [...cronConfig.platforms];
-  const fetchLimit = options?.fetchLimit ?? cronConfig.fetchLimit;
-  const logLabel = options?.logLabel ?? '[cron]';
-  const userId = options?.userId;
-  const relevanceLanguage = options?.relevanceLanguage;
-  const regionCode = options?.regionCode;
-  const order = options?.order;
-  const publishedAfter = options?.publishedAfter;
-  const publishedBefore = options?.publishedBefore;
-  const maxPages = options?.maxPages;
+export async function runKeywordSync(options: KeywordSyncOptions): Promise<KeywordSyncResult> {
+  const keywords = [...options.keywords];
+  const platforms = [...options.platforms];
+  const fetchLimit = options.fetchLimit ?? 50;
+  const logLabel = options.logLabel ?? '[sync]';
 
   const startedAt = new Date();
-  console.log(
-    `${logLabel} 开始执行：关键词=${keywords.join(', ') || '-'}, 平台=${platforms.join(', ') || '-'}`
-  );
+  console.log(`${logLabel} 开始执行：关键词=${keywords.join(', ') || '-'}, 平台=${platforms.join(', ') || '-'}`);
 
   const stats: SyncStat[] = [];
   let userCreatedTotal = 0;
@@ -77,6 +67,7 @@ export async function runKeywordSync(options?: KeywordSyncOptions): Promise<Keyw
       userCreated: 0,
       userUpdated: 0,
       userCreatedIds: [],
+      userProcessedIds: [],
       startedAt,
       finishedAt
     };
@@ -84,27 +75,32 @@ export async function runKeywordSync(options?: KeywordSyncOptions): Promise<Keyw
 
   for (const keyword of keywords) {
     for (const platform of platforms) {
-      const stat = await processKeywordPlatform(
+      const stat = await processKeywordPlatform({
         keyword,
         platform,
         fetchLimit,
         logLabel,
-        userId,
-        relevanceLanguage,
-        regionCode,
-        order,
-        publishedAfter,
-        publishedBefore,
-        maxPages
-      );
+        userId: options.userId,
+        relevanceLanguage: options.relevanceLanguage,
+        regionCode: options.regionCode,
+        order: options.order,
+        publishedAfter: options.publishedAfter,
+        publishedBefore: options.publishedBefore,
+        maxPages: options.maxPages
+      });
       stats.push(stat);
-      if (stat.userCreated) userCreatedTotal += stat.userCreated;
-      if (stat.userUpdated) userUpdatedTotal += stat.userUpdated;
-      if (stat.success && stat.userCreated && stat.userCreated > 0 && stat['userCreatedIds']) {
-        userCreatedIds.push(...(stat as unknown as { userCreatedIds?: string[] }).userCreatedIds ?? []);
+
+      if (stat.userCreated) {
+        userCreatedTotal += stat.userCreated;
       }
-      if (stat.success && stat['userProcessedIds']) {
-        userProcessedIds.push(...(stat as unknown as { userProcessedIds?: string[] }).userProcessedIds ?? []);
+      if (stat.userUpdated) {
+        userUpdatedTotal += stat.userUpdated;
+      }
+      if (stat.userCreatedIds?.length) {
+        userCreatedIds.push(...stat.userCreatedIds);
+      }
+      if (stat.userProcessedIds?.length) {
+        userProcessedIds.push(...stat.userProcessedIds);
       }
     }
   }
@@ -114,9 +110,7 @@ export async function runKeywordSync(options?: KeywordSyncOptions): Promise<Keyw
   const created = stats.reduce((acc, item) => acc + item.created, 0);
   const updated = stats.reduce((acc, item) => acc + item.updated, 0);
 
-  console.log(
-    `${logLabel} 本次任务完成：耗时 ${duration}ms，新增 ${created} 条，更新 ${updated} 条`
-  );
+  console.log(`${logLabel} 本次任务完成：耗时 ${duration}ms，新增 ${created} 条，更新 ${updated} 条`);
 
   return {
     stats,
@@ -131,43 +125,43 @@ export async function runKeywordSync(options?: KeywordSyncOptions): Promise<Keyw
   };
 }
 
-async function processKeywordPlatform(
-  keyword: string,
-  platform: Platform,
-  fetchLimit: number,
-  logLabel: string,
-  userId?: string,
-  relevanceLanguage?: string,
-  regionCode?: string,
-  order?: string,
-  publishedAfter?: string,
-  publishedBefore?: string,
-  maxPages?: number
-): Promise<SyncStat> {
+async function processKeywordPlatform(params: {
+  keyword: string;
+  platform: Platform;
+  fetchLimit: number;
+  logLabel: string;
+  userId?: string;
+  relevanceLanguage?: string;
+  regionCode?: string;
+  order?: string;
+  publishedAfter?: string;
+  publishedBefore?: string;
+  maxPages?: number;
+}): Promise<SyncStat> {
   try {
-    const provider = resolveProvider(platform);
+    const provider = resolveProvider(params.platform);
     const result = await provider.search({
-      query: keyword,
-      limit: fetchLimit,
-      relevanceLanguage,
-      regionCode,
-      order,
-      publishedAfter,
-      publishedBefore,
-      maxPages
+      query: params.keyword,
+      limit: params.fetchLimit,
+      relevanceLanguage: params.relevanceLanguage,
+      regionCode: params.regionCode,
+      order: params.order,
+      publishedAfter: params.publishedAfter,
+      publishedBefore: params.publishedBefore,
+      maxPages: params.maxPages
     });
 
-    const annotatedItems = annotateMatchLevel(result.items, keyword);
+    const annotatedItems = annotateMatchLevel(result.items, params.keyword);
+    const persistResult = await upsertFeedbackItems(params.platform, params.keyword, annotatedItems);
 
-    const persistResult = await upsertFeedbackItems(platform, keyword, annotatedItems);
     let userCreated = 0;
     let userUpdated = 0;
     let userCreatedIds: string[] = [];
     let userProcessedIds: string[] = [];
 
-    if (userId) {
+    if (params.userId) {
       const userResult = await upsertUserFeedbackItems(
-        userId,
+        params.userId,
         persistResult.processedItems.map((item) => ({
           feedbackItemId: item.id,
           seenAt: item.seenAt
@@ -180,40 +174,41 @@ async function processKeywordPlatform(
     }
 
     console.log(
-      `${logLabel} ${platform}/${keyword} → 抓取 ${result.items.length} 条，新增 ${persistResult.created} 条${
-        userId ? `，用户新增 ${userCreated} 条` : ''
+      `${params.logLabel} ${params.platform}/${params.keyword} → 抓取 ${result.items.length} 条，新增 ${persistResult.created} 条${
+        params.userId ? `，用户新增 ${userCreated} 条` : ''
       }`
     );
 
     return {
-      keyword,
-      platform,
+      keyword: params.keyword,
+      platform: params.platform,
       fetched: result.items.length,
       created: persistResult.created,
       updated: persistResult.updated,
       userCreated: userCreated || undefined,
       userUpdated: userUpdated || undefined,
-      ...(userCreatedIds.length > 0 ? { userCreatedIds } : {}),
-      ...(userProcessedIds.length > 0 ? { userProcessedIds } : {}),
+      userCreatedIds: userCreatedIds.length > 0 ? userCreatedIds : undefined,
+      userProcessedIds: userProcessedIds.length > 0 ? userProcessedIds : undefined,
       success: true
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`${logLabel} ${platform}/${keyword} 执行失败：`, message);
-  if (error instanceof YoutubeRateLimitError) {
-    throw error;
-  }
-  return {
-    keyword,
-      platform,
+    console.error(`${params.logLabel} ${params.platform}/${params.keyword} 执行失败：`, message);
+    if (error instanceof YoutubeRateLimitError) {
+      throw error;
+    }
+    return {
+      keyword: params.keyword,
+      platform: params.platform,
       fetched: 0,
       created: 0,
       updated: 0,
       userCreated: 0,
       userUpdated: 0,
       success: false,
-    error: message
-  };
+      error: message
+    };
+  }
 }
 
 function annotateMatchLevel(items: FeedbackItem[], keyword: string): FeedbackItem[] {
@@ -238,7 +233,7 @@ function annotateMatchLevel(items: FeedbackItem[], keyword: string): FeedbackIte
   const getMatchLevel = (item: FeedbackItem): string => {
     const title = item.title ?? '';
     const description = item.description ?? '';
-    const tagsText = Array.isArray(item.tags) ? item.tags.join(' ').toLowerCase() : '';
+    const tagsText = Array.isArray(item.tags) ? item.tags.join(' ') : '';
 
     if (containsPhrase(title)) return 'A';
     if (containsAllWords(title)) return 'B';
@@ -252,5 +247,4 @@ function annotateMatchLevel(items: FeedbackItem[], keyword: string): FeedbackIte
     ...item,
     matchLevel: getMatchLevel(item)
   }));
-}
 }

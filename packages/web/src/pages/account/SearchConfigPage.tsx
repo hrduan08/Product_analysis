@@ -24,18 +24,7 @@ function sortPlatforms(values: string[]): string[] {
   return PLATFORM_ORDER.filter((value) => values.includes(value));
 }
 
-type TimeInputElement = HTMLInputElement & { showPicker?: () => void };
-
 const CHANNEL_ORDER = ['feishu', 'email'] as const;
-const CHANNEL_LABEL: Record<typeof CHANNEL_ORDER[number], string> = {
-  feishu: '飞书',
-  email: '邮件'
-};
-
-function sortChannels(values: string[]): string[] {
-  const set = new Set(values);
-  return CHANNEL_ORDER.filter((channel) => set.has(channel));
-}
 
 type ToastState = { message: string; type?: 'success' | 'error' };
 
@@ -51,21 +40,32 @@ const SUPER_ADMINS = ['474226642@qq.com'];
 const ADMIN_TOKEN_KEY = 'pi-admin-token';
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_TOKEN ?? '';
 
+function sortChannels(values: string[]): string[] {
+  const set = new Set(values);
+  return CHANNEL_ORDER.filter((channel) => set.has(channel));
+}
+
 export function SearchConfigPage(): JSX.Element {
   const { user, setSession, logout } = useAuth();
   const { lang, setLang, t } = useLanguage();
   const navigate = useNavigate();
+
   const [config, setConfig] = useState<SearchConfig | null>(null);
   const [meta, setMeta] = useState<SearchConfigMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [keywordInput, setKeywordInput] = useState('');
-  const [timeInput, setTimeInput] = useState('');
+
+  const [redditCommunityInput, setRedditCommunityInput] = useState('');
+  const [redditKeywordInput, setRedditKeywordInput] = useState('');
+  const [youtubeKeywordInput, setYoutubeKeywordInput] = useState('');
+
   const [emailDraft, setEmailDraft] = useState('');
   const [feishuDraft, setFeishuDraft] = useState('');
   const [testingFeishu, setTestingFeishu] = useState(false);
+
   const [toast, setToast] = useState<ToastState | null>(null);
   const toastTimerRef = useRef<number | null>(null);
+
   const [menuOpen, setMenuOpen] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
   const [avatarTapCount, setAvatarTapCount] = useState(0);
@@ -79,34 +79,56 @@ export function SearchConfigPage(): JSX.Element {
   const [langOpen, setLangOpen] = useState(false);
 
   const NAV_TEXT = t({
-    zh: { language: '语言', zh: '中文', en: 'English', logout: '退出登录', loggingOut: '退出中...', status: '账户状态：', open: '打开账号信息' },
-    en: { language: 'Language', zh: 'Chinese', en: 'English', logout: 'Log out', loggingOut: 'Logging out...', status: 'Status: ', open: 'Open account' }
+    zh: {
+      language: '语言',
+      zh: '中文',
+      en: 'English',
+      logout: '退出登录',
+      loggingOut: '退出中...',
+      status: '账户状态：',
+      open: '打开账号信息'
+    },
+    en: {
+      language: 'Language',
+      zh: 'Chinese',
+      en: 'English',
+      logout: 'Log out',
+      loggingOut: 'Logging out...',
+      status: 'Status: ',
+      open: 'Open account'
+    }
   });
 
   const TEXT = t({
     zh: {
-      title: '每日搜索和分析',
-      subtitle: '系统将根据你设置的关键词，每日定时搜索并分析社媒平台中的热门用户源声。',
+      title: '社媒监控配置',
+      subtitle: '系统会按队列自动执行增量提取，不再需要手动设置每天固定时间。',
       loading: '页面加载中...',
-      searchPlatform: '社媒平台',
-      searchPlatformDesc: '你想分析哪个社媒平台的用户源声？',
-      keywords: '关键词',
-      keywordsDesc: '请输入你所关注的产品、话题等关键词，系统将据此搜索用户源声',
+      sectionPlatform: '1. 选择社媒平台',
+      sectionPlatformDesc: '按平台分别配置监控规则。',
+      sectionReddit: '2. Reddit 设置',
+      sectionYouTube: '3. YouTube 设置',
+      sectionNotify: '4. 消息通知',
+      disabledHint: '当前未启用该平台',
+      redditCommunities: '关注社区',
+      redditCommunitiesDesc: '填写 Reddit 社区 URL（最多 3 个）。',
+      redditCommunityPlaceholder: '例如：https://www.reddit.com/r/AppleWatch/',
+      redditKeywords: '社区内关键词筛选',
+      redditKeywordsDesc: '从社区新增内容中再做关键词匹配（最多 2 个，可不填）。',
+      redditKeywordPlaceholder: '例如：HuaweiWatchGT2',
+      youtubeKeywords: '关键词发现',
+      youtubeKeywordsDesc: 'YouTube 关键词全站发现（低频、有限额、best effort，每天最多 1 次）。',
+      youtubeKeywordPlaceholder: '例如：Huawei Watch GT2 review',
+      addCommunity: '添加社区',
       addKeyword: '添加关键词',
-      keywordPlaceholder: '例如：Apple Vision Pro、Helio Strap',
-      dailyTime: '每日定时搜索时间',
-      dailyTimeDesc: '你最希望每天哪个时间点更新搜索和分析结果？',
-      addTime: '添加时间',
-      timePlaceholder: '例如：09:00',
-      notify: '消息通知',
-      notifyDesc: '你希望通过哪种方式来通知搜索和分析结果？',
+      notifyDesc: '不管选择 Reddit 或 YouTube，都统一在这里配置通知方式。',
       notifyEmail: '邮件通知',
       notifyEmailPlaceholder: 'name@example.com',
       notifyFeishu: '飞书通知',
       feishuSteps: '飞书机器人Webhook设置步骤：',
       feishuStep1: '第一步：创建飞书群聊',
       feishuStep2: '第二步：在群聊页面右上角点击“...”，选择【设置】进入设置页面',
-      feishuStep3: '第三步：在设置页面选择【群机器人】，再依次点击【添加机器人】>【自定义机器人】，然后设置好机器人名称、描述，最后点击【添加】即可',
+      feishuStep3: '第三步：在设置页面选择【群机器人】，再依次点击【添加机器人】>【自定义机器人】',
       feishuStep4: '第四步：复制页面上显示的“Webhook地址”，添加到以下输入框并保存',
       feishuNotice: '注意：保存 Webhook地址后，请点击【测试飞书通知】，并在飞书中确认能收到测试消息。',
       feishuPlaceholder: 'https://open.feishu.cn/open-apis/bot/v2/hook/...',
@@ -116,52 +138,55 @@ export function SearchConfigPage(): JSX.Element {
       toastUpdateFail: '更新配置失败',
       toastLoadFail: '加载配置失败，请稍后重试',
       toastSessionExpired: '会话已失效，请重新登录',
-      toastPlatformPending: 'Reddit平台还在适配开发中，敬请期待！',
       toastNeedPlatform: '至少选择一个平台',
-      toastNeedKeyword: '请输入要添加的关键词',
-      toastKeywordMax: (n: number) => `最多只能添加 ${n} 个关键词`,
+      toastCommunityNeed: '请先填写社区 URL 或 r/社区名',
+      toastCommunityInvalid: '社区格式不正确，请填写社区 URL 或 r/社区名',
+      toastCommunityMax: (n: number) => `最多只能添加 ${n} 个社区`,
+      toastCommunityExist: '该社区已存在',
+      toastKeywordNeed: '请先填写关键词',
+      toastRedditKeywordMax: (n: number) => `Reddit 最多只能添加 ${n} 个关键词`,
+      toastYoutubeKeywordMax: (n: number) => `YouTube 最多只能添加 ${n} 个关键词`,
       toastKeywordExist: '关键词已存在',
-      toastNeedTime: '请选择时间',
-      toastTimeFormat: '时间格式必须为 HH:mm',
-      toastTimeMax: (n: number) => `每天最多设置 ${n} 个时间`,
-      toastTimeExist: '该时间已存在',
       toastNeedWebhook: '请先填写并保存 Webhook',
       toastFeishuTestOk: '飞书测试通知已发送',
       toastFeishuTestFail: '飞书测试通知发送失败，请稍后重试',
       toastNeedEmail: '邮箱不能为空',
-      toastEmailInvalid: '邮箱格式不正确',
       toastNeedNotifyChannel: '至少保留一个通知方式',
-      keywordsLabel: '关键词列表',
-      slotsLabel: '定时搜索时间',
-      notifyLabel: '通知方式',
-      summaryLoaded: '加载完成',
-      labelFeishuStatus: '飞书状态：'
+      labelFeishuStatus: '飞书状态：',
+      emptyCommunities: '暂无社区',
+      emptyKeywords: '暂无关键词'
     },
     en: {
-      title: 'Daily search & analysis',
-      subtitle: 'We search and analyze hot social feedback daily based on your keywords.',
+      title: 'Social Monitoring Config',
+      subtitle: 'We run incremental monitoring with an automatic queue. No fixed daily time is needed.',
       loading: 'Loading...',
-      searchPlatform: 'Social platforms',
-      searchPlatformDesc: 'Which platforms do you want to analyze?',
-      keywords: 'Keywords',
-      keywordsDesc: 'Enter the product/topic keywords you care about; we will search by them',
+      sectionPlatform: '1. Choose platforms',
+      sectionPlatformDesc: 'Configure rules by platform.',
+      sectionReddit: '2. Reddit settings',
+      sectionYouTube: '3. YouTube settings',
+      sectionNotify: '4. Notifications',
+      disabledHint: 'This platform is not enabled',
+      redditCommunities: 'Communities',
+      redditCommunitiesDesc: 'Add Reddit community URLs (up to 3).',
+      redditCommunityPlaceholder: 'e.g. https://www.reddit.com/r/AppleWatch/',
+      redditKeywords: 'In-source keyword filter',
+      redditKeywordsDesc: 'Match keywords from community incremental content (up to 2, optional).',
+      redditKeywordPlaceholder: 'e.g. HuaweiWatchGT2',
+      youtubeKeywords: 'Keyword discovery',
+      youtubeKeywordsDesc: 'YouTube global keyword discovery (low-frequency, budgeted, best effort, max once/day).',
+      youtubeKeywordPlaceholder: 'e.g. Huawei Watch GT2 review',
+      addCommunity: 'Add community',
       addKeyword: 'Add keyword',
-      keywordPlaceholder: 'e.g. Apple Vision Pro, Helio Strap',
-      dailyTime: 'Daily scheduled time',
-      dailyTimeDesc: 'At what time do you want daily results?',
-      addTime: 'Add time',
-      timePlaceholder: 'e.g. 09:00',
-      notify: 'Notifications',
-      notifyDesc: 'How should we deliver the search & analysis results to you?',
+      notifyDesc: 'Notification settings are shared by Reddit and YouTube.',
       notifyEmail: 'Email',
       notifyEmailPlaceholder: 'name@example.com',
       notifyFeishu: 'Feishu',
       feishuSteps: 'Feishu webhook setup:',
       feishuStep1: '1) Create a Feishu group chat',
       feishuStep2: '2) In group settings (… on top right) go to Settings',
-      feishuStep3: '3) Choose Group bots > Add bot > Custom bot, set name & description, click Add',
-      feishuStep4: '4) Copy the “Webhook URL” and paste below, then save',
-      feishuNotice: 'Note: after saving the webhook, click “Test Feishu notification” and check the group.',
+      feishuStep3: '3) Choose Group bots > Add bot > Custom bot',
+      feishuStep4: '4) Copy the Webhook URL and save it below',
+      feishuNotice: 'After saving the webhook, click “Test Feishu notification” and check your group.',
       feishuPlaceholder: 'https://open.feishu.cn/open-apis/bot/v2/hook/...',
       btnSave: 'Save',
       btnTestFeishu: 'Test Feishu notification',
@@ -169,28 +194,33 @@ export function SearchConfigPage(): JSX.Element {
       toastUpdateFail: 'Update failed',
       toastLoadFail: 'Failed to load config, please try again',
       toastSessionExpired: 'Session expired, please log in again',
-      toastPlatformPending: 'Reddit integration is coming soon.',
       toastNeedPlatform: 'Select at least one platform',
-      toastNeedKeyword: 'Please enter a keyword',
-      toastKeywordMax: (n: number) => `You can add up to ${n} keywords`,
+      toastCommunityNeed: 'Please enter a community URL or r/name',
+      toastCommunityInvalid: 'Invalid community format, use URL or r/name',
+      toastCommunityMax: (n: number) => `You can add up to ${n} communities`,
+      toastCommunityExist: 'Community already exists',
+      toastKeywordNeed: 'Please enter a keyword',
+      toastRedditKeywordMax: (n: number) => `Reddit supports up to ${n} keywords`,
+      toastYoutubeKeywordMax: (n: number) => `YouTube supports up to ${n} keywords`,
       toastKeywordExist: 'Keyword already exists',
-      toastNeedTime: 'Please pick a time',
-      toastTimeFormat: 'Time must be HH:mm',
-      toastTimeMax: (n: number) => `You can set up to ${n} times per day`,
-      toastTimeExist: 'This time already exists',
       toastNeedWebhook: 'Please save the Webhook first',
       toastFeishuTestOk: 'Test notification sent to Feishu',
       toastFeishuTestFail: 'Failed to send Feishu test notification',
       toastNeedEmail: 'Email cannot be empty',
-      toastEmailInvalid: 'Invalid email',
       toastNeedNotifyChannel: 'Keep at least one notification channel',
-      keywordsLabel: 'Keywords',
-      slotsLabel: 'Scheduled times',
-      notifyLabel: 'Notification channels',
-      summaryLoaded: 'Loaded',
-      labelFeishuStatus: 'Feishu status:'
+      labelFeishuStatus: 'Feishu status: ',
+      emptyCommunities: 'No communities yet',
+      emptyKeywords: 'No keywords yet'
     }
   });
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 2600);
+  };
 
   useEffect(() => {
     return () => {
@@ -240,21 +270,6 @@ export function SearchConfigPage(): JSX.Element {
     };
   }, [user?.id]);
 
-  const maxKeywords = meta?.maxKeywords ?? 3;
-  const maxSlots = meta?.maxSlots ?? 3;
-
-  const nextRunDisplay = useMemo(() => {
-    if (!config?.nextRunAt) {
-      return lang === 'zh' ? '尚未排程' : 'Not scheduled';
-    }
-    try {
-      const date = new Date(config.nextRunAt);
-      return date.toLocaleString();
-    } catch {
-      return config.nextRunAt;
-    }
-  }, [config?.nextRunAt]);
-
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (avatarRef.current && !avatarRef.current.contains(event.target as Node)) {
@@ -280,9 +295,16 @@ export function SearchConfigPage(): JSX.Element {
     return <Navigate to="/" replace />;
   }
 
+  const maxRedditCommunities = meta?.maxRedditCommunities ?? 3;
+  const maxRedditKeywords = meta?.maxRedditKeywords ?? 2;
+  const maxYoutubeKeywords = meta?.maxYoutubeKeywords ?? 2;
+
   const accountStatusLabel = useMemo(() => {
     if (!user) return null;
-    const map = lang === 'zh' ? USER_STATUS_LABEL : { trialing: 'Trial', active: 'Active', past_due: 'Past due', canceled: 'Canceled' };
+    const map =
+      lang === 'zh'
+        ? USER_STATUS_LABEL
+        : { trialing: 'Trial', active: 'Active', past_due: 'Past due', canceled: 'Canceled' };
     return map[user.status] ?? user.status;
   }, [lang, user]);
 
@@ -293,22 +315,16 @@ export function SearchConfigPage(): JSX.Element {
     const diffDays = Math.ceil((endsAt.getTime() - Date.now()) / ONE_DAY_MS);
     const message =
       diffDays > 0
-        ? (lang === 'zh'
-            ? `试用剩余 ${diffDays} 天（${endsAt.toLocaleDateString()} 到期）`
-            : `Trial ends in ${diffDays} days (${endsAt.toLocaleDateString()})`)
-        : (lang === 'zh'
-            ? `试用已到期（${endsAt.toLocaleDateString()}）`
-            : `Trial expired (${endsAt.toLocaleDateString()})`);
+        ? lang === 'zh'
+          ? `试用剩余 ${diffDays} 天（${endsAt.toLocaleDateString()} 到期）`
+          : `Trial ends in ${diffDays} days (${endsAt.toLocaleDateString()})`
+        : lang === 'zh'
+          ? `试用已到期（${endsAt.toLocaleDateString()}）`
+          : `Trial expired (${endsAt.toLocaleDateString()})`;
     return { message };
   }, [lang, user?.trialEndsAt]);
 
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    setToast({ message, type });
-    if (toastTimerRef.current) {
-      window.clearTimeout(toastTimerRef.current);
-    }
-    toastTimerRef.current = window.setTimeout(() => setToast(null), 2600);
-  };
+  type SearchConfigPatchInput = SearchConfigPatchPayload;
 
   const applyPatch = async (
     payload: Partial<SearchConfig>,
@@ -339,14 +355,8 @@ export function SearchConfigPage(): JSX.Element {
     }
   };
 
-  type SearchConfigPatchInput = SearchConfigPatchPayload;
-
   const handlePlatformToggle = async (platform: string) => {
     if (!config) return;
-    if (platform === 'reddit') {
-      showToast(TEXT.toastPlatformPending);
-      return;
-    }
     const current = new Set(config.platforms);
     if (current.has(platform)) {
       current.delete(platform);
@@ -361,63 +371,95 @@ export function SearchConfigPage(): JSX.Element {
     await applyPatch({ platforms: next }, { platforms: next });
   };
 
-  const handleAddKeyword = async (event: FormEvent<HTMLFormElement>) => {
+  const handleAddRedditCommunity = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!config) return;
-    const value = keywordInput.trim();
+    const raw = redditCommunityInput.trim();
+    if (!raw) {
+      showToast(TEXT.toastCommunityNeed, 'error');
+      return;
+    }
+    const normalized = normalizeRedditCommunity(raw);
+    if (!normalized) {
+      showToast(TEXT.toastCommunityInvalid, 'error');
+      return;
+    }
+    if (config.redditCommunities.length >= maxRedditCommunities) {
+      showToast(TEXT.toastCommunityMax(maxRedditCommunities), 'error');
+      return;
+    }
+    const exists = config.redditCommunities.some(
+      (item) => normalizeRedditCommunity(item)?.toLowerCase() === normalized.toLowerCase()
+    );
+    if (exists) {
+      showToast(TEXT.toastCommunityExist, 'error');
+      return;
+    }
+    const next = [...config.redditCommunities, normalized];
+    setRedditCommunityInput('');
+    await applyPatch({ redditCommunities: next }, { redditCommunities: next });
+  };
+
+  const handleRemoveRedditCommunity = async (community: string) => {
+    if (!config) return;
+    const next = config.redditCommunities.filter((item) => item !== community);
+    await applyPatch({ redditCommunities: next }, { redditCommunities: next });
+  };
+
+  const handleAddRedditKeyword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!config) return;
+    const value = redditKeywordInput.trim();
     if (!value) {
-      showToast(TEXT.toastNeedKeyword, 'error');
+      showToast(TEXT.toastKeywordNeed, 'error');
       return;
     }
-    if (config.keywords.length >= maxKeywords) {
-      showToast(TEXT.toastKeywordMax(maxKeywords), 'error');
+    if (config.redditKeywords.length >= maxRedditKeywords) {
+      showToast(TEXT.toastRedditKeywordMax(maxRedditKeywords), 'error');
       return;
     }
-    const exists = config.keywords.some((item) => item.toLowerCase() === value.toLowerCase());
+    const exists = config.redditKeywords.some((item) => item.toLowerCase() === value.toLowerCase());
     if (exists) {
       showToast(TEXT.toastKeywordExist, 'error');
       return;
     }
-    const next = [...config.keywords, value];
-    setKeywordInput('');
-    await applyPatch({ keywords: next }, { keywords: next });
+    const next = [...config.redditKeywords, value];
+    setRedditKeywordInput('');
+    await applyPatch({ redditKeywords: next }, { redditKeywords: next });
   };
 
-  const handleRemoveKeyword = async (keyword: string) => {
+  const handleRemoveRedditKeyword = async (keyword: string) => {
     if (!config) return;
-    const next = config.keywords.filter((item) => item !== keyword);
-    await applyPatch({ keywords: next }, { keywords: next });
+    const next = config.redditKeywords.filter((item) => item !== keyword);
+    await applyPatch({ redditKeywords: next }, { redditKeywords: next });
   };
 
-  const handleAddSlot = async (event: FormEvent<HTMLFormElement>) => {
+  const handleAddYoutubeKeyword = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!config) return;
-    const value = timeInput.trim();
+    const value = youtubeKeywordInput.trim();
     if (!value) {
-      showToast(TEXT.toastNeedTime, 'error');
+      showToast(TEXT.toastKeywordNeed, 'error');
       return;
     }
-    if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(value)) {
-      showToast(TEXT.toastTimeFormat, 'error');
+    if (config.youtubeKeywords.length >= maxYoutubeKeywords) {
+      showToast(TEXT.toastYoutubeKeywordMax(maxYoutubeKeywords), 'error');
       return;
     }
-    if (config.slots.length >= maxSlots) {
-      showToast(TEXT.toastTimeMax(maxSlots), 'error');
+    const exists = config.youtubeKeywords.some((item) => item.toLowerCase() === value.toLowerCase());
+    if (exists) {
+      showToast(TEXT.toastKeywordExist, 'error');
       return;
     }
-    if (config.slots.includes(value)) {
-      showToast(TEXT.toastTimeExist, 'error');
-      return;
-    }
-    const next = sortSlots([...config.slots, value]);
-    setTimeInput('');
-    await applyPatch({ slots: next }, { slots: next });
+    const next = [...config.youtubeKeywords, value];
+    setYoutubeKeywordInput('');
+    await applyPatch({ youtubeKeywords: next }, { youtubeKeywords: next });
   };
 
-  const handleRemoveSlot = async (slot: string) => {
+  const handleRemoveYoutubeKeyword = async (keyword: string) => {
     if (!config) return;
-    const next = config.slots.filter((item) => item !== slot);
-    await applyPatch({ slots: next }, { slots: next });
+    const next = config.youtubeKeywords.filter((item) => item !== keyword);
+    await applyPatch({ youtubeKeywords: next }, { youtubeKeywords: next });
   };
 
   const handleChannelToggle = async (channel: 'email' | 'feishu') => {
@@ -668,230 +710,273 @@ export function SearchConfigPage(): JSX.Element {
   const emailEnabled = config.notifyChannels.includes('email');
   const feishuStatusLabel =
     config.feishuStatus === 'ok'
-      ? lang === 'zh' ? '可用' : 'OK'
+      ? lang === 'zh'
+        ? '可用'
+        : 'OK'
       : config.feishuStatus === 'failed'
-      ? lang === 'zh' ? '测试失败' : 'Failed'
-      : lang === 'zh' ? '待测试' : 'Not tested';
+        ? lang === 'zh'
+          ? '测试失败'
+          : 'Failed'
+        : lang === 'zh'
+          ? '待测试'
+          : 'Not tested';
   const feishuLastTestDisplay = config.feishuLastTestedAt
     ? new Date(config.feishuLastTestedAt).toLocaleString()
-    : lang === 'zh' ? '尚未测试' : 'Not tested';
+    : lang === 'zh'
+      ? '尚未测试'
+      : 'Not tested';
   const feishuWebhookDirty =
     feishuDraft.trim() !== (config?.feishuWebhook ? config.feishuWebhook.trim() : '');
 
   return (
     <>
-    <div className="dashboard">
-      {AccountNav}
-      <div className="dashboard-shell config-page">
-        <header className="config-header">
-          <div>
-            <h1>{TEXT.title}</h1>
-            <p>{TEXT.subtitle}</p>
-          </div>
-          <Link to="/app" className="config-link">
-            {lang === 'zh' ? '返回控制台' : 'Back to dashboard'}
-          </Link>
-        </header>
+      <div className="dashboard">
+        {AccountNav}
+        <div className="dashboard-shell config-page">
+          <header className="config-header">
+            <div>
+              <h1>{TEXT.title}</h1>
+              <p>{TEXT.subtitle}</p>
+            </div>
+            <Link to="/app" className="config-link">
+              {lang === 'zh' ? '返回控制台' : 'Back to dashboard'}
+            </Link>
+          </header>
 
-        <section className="config-section">
-          <h3>{lang === 'zh' ? '1. 选择社媒平台' : '1. Choose platforms'}</h3>
-          <p className="config-section__hint">{TEXT.searchPlatformDesc}</p>
-          <div className="platform-toggle">
-            {PLATFORM_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={`platform-option ${config.platforms.includes(option.value) ? 'active' : ''}`}
-                onClick={() => void handlePlatformToggle(option.value)}
-                disabled={saving}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-          {(config.platforms.includes('x') || config.platforms.includes('facebook')) && (
-            <p className="config-tip">
-              {lang === 'zh' ? 'X 与 Facebook 将在后续版本接入，无需重复操作。' : 'X and Facebook will be supported later.'}
-            </p>
-          )}
-        </section>
-
-        <section className="config-section">
-          <div className="config-section__header">
-            <h3>{lang === 'zh' ? '2. 关键词' : '2. Keywords'}</h3>
-            <span className="config-section__hint">
-              {lang === 'zh' ? `最多 ${maxKeywords} 个` : `Up to ${maxKeywords}`}
-            </span>
-          </div>
-          <p className="config-section__hint">{TEXT.keywordsDesc}</p>
-          <div className="config-chip-list">
-            {config.keywords.map((keyword) => (
-              <span key={keyword} className="config-chip">
-                {keyword}
+          <section className="config-section">
+            <h3>{TEXT.sectionPlatform}</h3>
+            <p className="config-section__hint">{TEXT.sectionPlatformDesc}</p>
+            <div className="platform-toggle">
+              {PLATFORM_OPTIONS.map((option) => (
                 <button
+                  key={option.value}
                   type="button"
-                  className="config-chip__remove"
-                  onClick={() => void handleRemoveKeyword(keyword)}
+                  className={`platform-option ${config.platforms.includes(option.value) ? 'active' : ''}`}
+                  onClick={() => void handlePlatformToggle(option.value)}
                   disabled={saving}
-                  aria-label={(lang === 'zh' ? '删除关键词 ' : 'Remove keyword ') + keyword}
                 >
-                  ×
+                  {option.label}
                 </button>
-              </span>
-            ))}
-            {config.keywords.length === 0 && <span className="config-empty">{lang === 'zh' ? '暂无关键词' : 'No keywords yet'}</span>}
-          </div>
-          <form className="config-inline-form" onSubmit={(event) => void handleAddKeyword(event)}>
-            <input
-              type="text"
-              value={keywordInput}
-              onChange={(event) => setKeywordInput(event.target.value)}
-              placeholder={TEXT.keywordPlaceholder}
-              disabled={saving}
-            />
-            <button type="submit" disabled={saving || config.keywords.length >= maxKeywords}>
-              {TEXT.addKeyword}
-            </button>
-          </form>
-        </section>
+              ))}
+            </div>
+          </section>
 
-        <section className="config-section">
-          <div className="config-section__header">
-            <h3>{lang === 'zh' ? '3. 每日定时搜索时间' : '3. Scheduled time'}</h3>
-            <span className="config-section__hint">
-              {lang === 'zh' ? `最多 ${maxSlots} 个时间点` : `Up to ${maxSlots} times`}
-            </span>
-          </div>
-          <p className="config-section__hint">{TEXT.dailyTimeDesc}</p>
-          <div className="config-chip-list">
-            {config.slots.map((slot) => (
-              <span key={slot} className="config-chip">
-                {slot}
+          <section className="config-section">
+            <div className="config-section__header">
+              <h3>{TEXT.sectionReddit}</h3>
+              <span className="config-section__hint">{`Max ${maxRedditCommunities} communities / ${maxRedditKeywords} keywords`}</span>
+            </div>
+            {!config.platforms.includes('reddit') ? (
+              <p className="config-section__hint">{TEXT.disabledHint}</p>
+            ) : (
+              <>
+                <p className="config-section__hint">{TEXT.redditCommunitiesDesc}</p>
+                <div className="config-chip-list">
+                  {config.redditCommunities.map((community) => (
+                    <span key={community} className="config-chip">
+                      {community}
+                      <button
+                        type="button"
+                        className="config-chip__remove"
+                        onClick={() => void handleRemoveRedditCommunity(community)}
+                        disabled={saving}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  {config.redditCommunities.length === 0 ? (
+                    <span className="config-empty">{TEXT.emptyCommunities}</span>
+                  ) : null}
+                </div>
+                <form className="config-inline-form" onSubmit={(event) => void handleAddRedditCommunity(event)}>
+                  <input
+                    type="text"
+                    value={redditCommunityInput}
+                    onChange={(event) => setRedditCommunityInput(event.target.value)}
+                    placeholder={TEXT.redditCommunityPlaceholder}
+                    disabled={saving}
+                  />
+                  <button type="submit" disabled={saving || config.redditCommunities.length >= maxRedditCommunities}>
+                    {TEXT.addCommunity}
+                  </button>
+                </form>
+
+                <p className="config-section__hint">{TEXT.redditKeywordsDesc}</p>
+                <div className="config-chip-list">
+                  {config.redditKeywords.map((keyword) => (
+                    <span key={keyword} className="config-chip">
+                      {keyword}
+                      <button
+                        type="button"
+                        className="config-chip__remove"
+                        onClick={() => void handleRemoveRedditKeyword(keyword)}
+                        disabled={saving}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  {config.redditKeywords.length === 0 ? (
+                    <span className="config-empty">{TEXT.emptyKeywords}</span>
+                  ) : null}
+                </div>
+                <form className="config-inline-form" onSubmit={(event) => void handleAddRedditKeyword(event)}>
+                  <input
+                    type="text"
+                    value={redditKeywordInput}
+                    onChange={(event) => setRedditKeywordInput(event.target.value)}
+                    placeholder={TEXT.redditKeywordPlaceholder}
+                    disabled={saving}
+                  />
+                  <button type="submit" disabled={saving || config.redditKeywords.length >= maxRedditKeywords}>
+                    {TEXT.addKeyword}
+                  </button>
+                </form>
+              </>
+            )}
+          </section>
+
+          <section className="config-section">
+            <div className="config-section__header">
+              <h3>{TEXT.sectionYouTube}</h3>
+              <span className="config-section__hint">{`Max ${maxYoutubeKeywords} keywords`}</span>
+            </div>
+            {!config.platforms.includes('youtube') ? (
+              <p className="config-section__hint">{TEXT.disabledHint}</p>
+            ) : (
+              <>
+                <p className="config-section__hint">{TEXT.youtubeKeywordsDesc}</p>
+                <div className="config-chip-list">
+                  {config.youtubeKeywords.map((keyword) => (
+                    <span key={keyword} className="config-chip">
+                      {keyword}
+                      <button
+                        type="button"
+                        className="config-chip__remove"
+                        onClick={() => void handleRemoveYoutubeKeyword(keyword)}
+                        disabled={saving}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  {config.youtubeKeywords.length === 0 ? (
+                    <span className="config-empty">{TEXT.emptyKeywords}</span>
+                  ) : null}
+                </div>
+                <form className="config-inline-form" onSubmit={(event) => void handleAddYoutubeKeyword(event)}>
+                  <input
+                    type="text"
+                    value={youtubeKeywordInput}
+                    onChange={(event) => setYoutubeKeywordInput(event.target.value)}
+                    placeholder={TEXT.youtubeKeywordPlaceholder}
+                    disabled={saving}
+                  />
+                  <button type="submit" disabled={saving || config.youtubeKeywords.length >= maxYoutubeKeywords}>
+                    {TEXT.addKeyword}
+                  </button>
+                </form>
+              </>
+            )}
+          </section>
+
+          <section className="config-section">
+            <h3>{TEXT.sectionNotify}</h3>
+            <p className="config-section__hint">{TEXT.notifyDesc}</p>
+            <div className="platform-toggle">
+              {CHANNEL_ORDER.map((channel) => (
                 <button
+                  key={channel}
                   type="button"
-                  className="config-chip__remove"
-                  onClick={() => void handleRemoveSlot(slot)}
+                  className={`platform-option ${config.notifyChannels.includes(channel) ? 'active' : ''}`}
+                  onClick={() => void handleChannelToggle(channel)}
                   disabled={saving}
-                  aria-label={(lang === 'zh' ? '删除时间 ' : 'Remove time ') + slot}
                 >
-                  ×
+                  {channel === 'email' ? TEXT.notifyEmail : TEXT.notifyFeishu}
                 </button>
-              </span>
-            ))}
-            {config.slots.length === 0 && <span className="config-empty">{lang === 'zh' ? '尚未设置执行时间' : 'No times set'}</span>}
-          </div>
-          <form className="config-inline-form" onSubmit={(event) => void handleAddSlot(event)}>
-            <input
-              type="time"
-              value={timeInput}
-              onChange={(event) => setTimeInput(event.target.value)}
-              onClick={(event) => {
-                const element = event.currentTarget as TimeInputElement;
-                element.showPicker?.();
-              }}
-              onFocus={(event) => {
-                const element = event.currentTarget as TimeInputElement;
-                element.showPicker?.();
-              }}
-              disabled={saving}
-            />
-            <button type="submit" disabled={saving || config.slots.length >= maxSlots}>
-              {TEXT.addTime}
-            </button>
-          </form>
-        </section>
+              ))}
+            </div>
+            {feishuEnabled ? (
+              <>
+                <p className="config-section__hint">
+                  {TEXT.feishuSteps}
+                  <br />
+                  {TEXT.feishuStep1}
+                  <br />
+                  {TEXT.feishuStep2}
+                  <br />
+                  {TEXT.feishuStep3}
+                  <br />
+                  {TEXT.feishuStep4}
+                </p>
+                <p className="config-section__hint config-section__hint--tight">{TEXT.feishuNotice}</p>
+                <div className="config-inline-form">
+                  <input
+                    type="url"
+                    value={feishuDraft}
+                    onChange={(event) => setFeishuDraft(event.target.value)}
+                    placeholder={TEXT.feishuPlaceholder}
+                    disabled={saving}
+                  />
+                  <button type="button" onClick={() => void handleFeishuSubmit()} disabled={saving || !feishuWebhookDirty}>
+                    {TEXT.btnSave}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleFeishuTest()}
+                    disabled={saving || testingFeishu || !config.feishuWebhook}
+                  >
+                    {testingFeishu ? (lang === 'zh' ? '测试中…' : 'Testing...') : TEXT.btnTestFeishu}
+                  </button>
+                </div>
+                <p className="config-section__hint">
+                  {TEXT.labelFeishuStatus}
+                  {feishuStatusLabel} · {feishuLastTestDisplay}
+                </p>
+              </>
+            ) : null}
+            {emailEnabled ? (
+              <>
+                <p className="config-section__hint">
+                  {lang === 'zh'
+                    ? '邮件通知将发送到以下邮箱，可修改为其他地址。'
+                    : 'Email notifications will be sent to the address below.'}
+                </p>
+                <div className="config-inline-form config-inline-form--single">
+                  <input
+                    type="email"
+                    value={emailDraft}
+                    onChange={(event) => setEmailDraft(event.target.value)}
+                    onBlur={() => void handleEmailSubmit()}
+                    placeholder={TEXT.notifyEmailPlaceholder}
+                    disabled={saving}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleEmailSubmit()}
+                    disabled={saving || emailDraft.trim() === config.notifyEmail.trim()}
+                  >
+                    {TEXT.btnSave}
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </section>
 
-        <section className="config-section">
-          <h3>{lang === 'zh' ? '4. 消息通知' : '4. Notifications'}</h3>
-          <p className="config-section__hint">{TEXT.notifyDesc}</p>
-          <div className="platform-toggle">
-            {CHANNEL_ORDER.map((channel) => (
-              <button
-                key={channel}
-                type="button"
-                className={`platform-option ${config.notifyChannels.includes(channel) ? 'active' : ''}`}
-                onClick={() => void handleChannelToggle(channel)}
-                disabled={saving}
-              >
-                {channel === 'email' ? TEXT.notifyEmail : TEXT.notifyFeishu}
-              </button>
-            ))}
-          </div>
-          {feishuEnabled && (
-            <>
-              <p className="config-section__hint">
-                {TEXT.feishuSteps}
-                <br />
-                {TEXT.feishuStep1}
-                <br />
-                {TEXT.feishuStep2}
-                <br />
-                {TEXT.feishuStep3}
-                <br />
-                {TEXT.feishuStep4}
-              </p>
-              <p className="config-section__hint config-section__hint--tight">
-                {TEXT.feishuNotice}
-              </p>
-              <div className="config-inline-form">
-                <input
-                  type="url"
-                  value={feishuDraft}
-                  onChange={(event) => setFeishuDraft(event.target.value)}
-                  placeholder={TEXT.feishuPlaceholder}
-                  disabled={saving}
-                />
-                <button type="button" onClick={() => void handleFeishuSubmit()} disabled={saving || !feishuWebhookDirty}>
-                  {TEXT.btnSave}
-                </button>
-                <button type="button" onClick={() => void handleFeishuTest()} disabled={saving || testingFeishu || !config.feishuWebhook}>
-                  {testingFeishu ? (lang === 'zh' ? '测试中…' : 'Testing...') : TEXT.btnTestFeishu}
-                </button>
-              </div>
-              <p className="config-section__hint">
-                {TEXT.labelFeishuStatus}
-                {feishuStatusLabel} · {feishuLastTestDisplay}
-              </p>
-            </>
-          )}
-          {emailEnabled && (
-            <>
-              <p className="config-section__hint">
-                {lang === 'zh' ? '邮件通知将发送到以下邮箱，可修改为其他地址。' : 'Email notifications will be sent to the address below.'}
-              </p>
-              <div className="config-inline-form config-inline-form--single">
-                <input
-                  type="email"
-                  value={emailDraft}
-                  onChange={(event) => setEmailDraft(event.target.value)}
-                  onBlur={() => void handleEmailSubmit()}
-                  placeholder={TEXT.notifyEmailPlaceholder}
-                  disabled={saving}
-                />
-                <button
-                  type="button"
-                  onClick={() => void handleEmailSubmit()}
-                  disabled={saving || emailDraft.trim() === config.notifyEmail.trim()}
-                >
-                  {TEXT.btnSave}
-                </button>
-              </div>
-            </>
-          )}
-        </section>
-
-        {toast && (
-          <div className="toast-container">
-            <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
-          </div>
-        )}
+          {toast ? (
+            <div className="toast-container">
+              <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+            </div>
+          ) : null}
+        </div>
       </div>
-    </div>
+
       {adminModalOpen ? (
         <div className="admin-password-modal">
           <form className="admin-password-card" onSubmit={handleAdminPasswordSubmit}>
-              <h3>{lang === 'zh' ? '输入管理员密码' : 'Enter admin password'}</h3>
-              <p className="plan-meta">{lang === 'zh' ? '完成验证后将进入管理平台。' : 'After verification you will enter admin console.'}</p>
+            <h3>{lang === 'zh' ? '输入管理员密码' : 'Enter admin password'}</h3>
+            <p className="plan-meta">{lang === 'zh' ? '完成验证后将进入管理平台。' : 'After verification you will enter admin console.'}</p>
             <input
               type="password"
               value={adminPasswordInput}
@@ -915,8 +1000,34 @@ export function SearchConfigPage(): JSX.Element {
   );
 }
 
-function sortSlots(slots: string[]): string[] {
-  return slots
-    .slice()
-    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+function normalizeRedditCommunity(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const url = new URL(trimmed);
+    const segments = url.pathname.split('/').filter(Boolean);
+    const index = segments.findIndex((item) => item.toLowerCase() === 'r');
+    if (index >= 0 && segments[index + 1]) {
+      const name = segments[index + 1].trim();
+      if (/^[A-Za-z0-9_]{2,32}$/.test(name)) {
+        return `https://www.reddit.com/r/${name}/`;
+      }
+    }
+  } catch {
+    // not URL, continue as shorthand
+  }
+
+  const short = trimmed.match(/^r\/([A-Za-z0-9_]{2,32})$/i);
+  if (short?.[1]) {
+    return `https://www.reddit.com/r/${short[1]}/`;
+  }
+
+  if (/^[A-Za-z0-9_]{2,32}$/.test(trimmed)) {
+    return `https://www.reddit.com/r/${trimmed}/`;
+  }
+
+  return null;
 }

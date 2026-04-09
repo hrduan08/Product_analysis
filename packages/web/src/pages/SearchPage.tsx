@@ -78,9 +78,9 @@ export function SearchPage() {
         benefitsTasks: (n: number) => `${n} 个定时任务`,
         benefitsNotify: (n: number) => `${n} 个通知渠道`,
         defaultExpired: '待设置',
-        daily: '每日定时搜索和分析',
+        daily: '自动监控与分析',
         keywords: '关键词：',
-        slots: '定时搜索时间：',
+        slots: '执行模式：',
         notify: '消息通知方式：',
         summaryBtnConfigured: '修改搜索配置',
         summaryBtnEmpty: '配置搜索任务',
@@ -131,9 +131,9 @@ export function SearchPage() {
         benefitsTasks: (n: number) => `${n} scheduled tasks`,
         benefitsNotify: (n: number) => `${n} notification channels`,
         defaultExpired: 'Not set',
-        daily: 'Daily scheduled search & analysis',
+        daily: 'Automated monitoring & analysis',
         keywords: 'Keywords: ',
-        slots: 'Search time: ',
+        slots: 'Execution mode: ',
         notify: 'Notify via: ',
         summaryBtnConfigured: 'Edit search config',
         summaryBtnEmpty: 'Set up search task',
@@ -244,15 +244,34 @@ export function SearchPage() {
     ? TEXT.instant.table.loading
     : lang === 'zh' ? '尚未配置' : 'Not set yet';
 
+  const configKeywords = searchConfigSummary
+    ? Array.from(
+        new Set(
+          [
+            ...(searchConfigSummary.youtubeKeywords ?? []),
+            ...(searchConfigSummary.redditKeywords ?? [])
+          ]
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+        )
+      )
+    : [];
+
   const searchKeywordsText =
-    searchConfigSummary && searchConfigSummary.keywords.length > 0
-      ? searchConfigSummary.keywords.slice(0, 3).join(lang === 'zh' ? '、' : ', ')
-      : lang === 'zh' ? '未设置关键词' : 'Not set';
+    configKeywords.length > 0
+      ? configKeywords.slice(0, 3).join(lang === 'zh' ? '、' : ', ')
+      : lang === 'zh'
+        ? '未设置关键词'
+        : 'Not set';
 
   const searchTimesText =
-    searchConfigSummary && searchConfigSummary.slots.length > 0
-      ? searchConfigSummary.slots.join(lang === 'zh' ? '、' : ', ')
-      : lang === 'zh' ? '未设置时间' : 'Not set';
+    searchConfigSummary
+      ? lang === 'zh'
+        ? '系统自动队列执行（无固定时间）'
+        : 'Automatic queue scheduling (no fixed time)'
+      : lang === 'zh'
+        ? '未配置'
+        : 'Not set';
 
   const searchNotifyText =
     searchConfigSummary && searchConfigSummary.notifyChannels.length > 0

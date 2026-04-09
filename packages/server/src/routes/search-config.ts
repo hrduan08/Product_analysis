@@ -21,8 +21,9 @@ const patchSchema = z
   .object({
     userId: z.string().uuid(),
     platforms: z.array(z.enum(PLATFORM_OPTIONS)).optional(),
-    keywords: z.array(z.string()).optional(),
-    slots: z.array(z.string()).optional(),
+    redditCommunities: z.array(z.string()).optional(),
+    redditKeywords: z.array(z.string()).optional(),
+    youtubeKeywords: z.array(z.string()).optional(),
     notifyEmail: z.string().optional(),
     timezone: z.string().optional(),
     notifyChannels: z.array(z.enum(['email', 'feishu'] as const)).optional(),
@@ -44,8 +45,9 @@ router.get('/app/search-config', async (req, res, next) => {
       config: serializeConfig(config),
       meta: {
         supportedPlatforms: getSelectablePlatforms(),
-        maxKeywords: config.limits.maxKeywords,
-        maxSlots: config.limits.maxSlots,
+        maxRedditCommunities: config.limits.maxRedditCommunities,
+        maxRedditKeywords: config.limits.maxRedditKeywords,
+        maxYoutubeKeywords: config.limits.maxYoutubeKeywords,
         defaultTimezone: SEARCH_CONFIG_DEFAULT_TIMEZONE
       }
     });
@@ -61,10 +63,7 @@ router.patch('/app/search-config', async (req, res, next) => {
     res.json({ config: serializeConfig(config) });
   } catch (error) {
     if (error instanceof ZodError) {
-      const issue = error.issues[0];
-      const message = issue?.path?.includes('slots')
-        ? '请至少保留一个执行时间，可先添加新的时间再删除旧的'
-        : '请求参数不符合要求，请检查后重试';
+      const message = '请求参数不符合要求，请检查后重试';
       return res.status(400).json({ code: 'BAD_REQUEST', message });
     }
     next(error);
@@ -90,8 +89,9 @@ router.post('/app/search-config/test-feishu', async (req, res, next) => {
 function serializeConfig(config: {
   userId: string;
   platforms: string[];
-  keywords: string[];
-  slots: string[];
+  redditCommunities: string[];
+  redditKeywords: string[];
+  youtubeKeywords: string[];
   notifyEmail: string;
   timezone: string;
   notifyChannels: string[];
@@ -99,20 +99,23 @@ function serializeConfig(config: {
   feishuStatus: string | null;
   feishuLastTestedAt: Date | null;
   nextRunAt: Date | null;
-  lastRunAt: Date | null;
+  redditLastRunAt: Date | null;
+  youtubeLastRunAt: Date | null;
   lastNotifiedAt: Date | null;
   createdAt: Date | null;
   updatedAt: Date | null;
   limits: {
-    maxKeywords: number;
-    maxSlots: number;
+    maxRedditCommunities: number;
+    maxRedditKeywords: number;
+    maxYoutubeKeywords: number;
   };
 }) {
   return {
     userId: config.userId,
     platforms: config.platforms,
-    keywords: config.keywords,
-    slots: config.slots,
+    redditCommunities: config.redditCommunities,
+    redditKeywords: config.redditKeywords,
+    youtubeKeywords: config.youtubeKeywords,
     notifyEmail: config.notifyEmail,
     timezone: config.timezone,
     notifyChannels: config.notifyChannels,
@@ -120,13 +123,15 @@ function serializeConfig(config: {
     feishuStatus: config.feishuStatus,
     feishuLastTestedAt: config.feishuLastTestedAt ? config.feishuLastTestedAt.toISOString() : null,
     nextRunAt: config.nextRunAt ? config.nextRunAt.toISOString() : null,
-    lastRunAt: config.lastRunAt ? config.lastRunAt.toISOString() : null,
+    redditLastRunAt: config.redditLastRunAt ? config.redditLastRunAt.toISOString() : null,
+    youtubeLastRunAt: config.youtubeLastRunAt ? config.youtubeLastRunAt.toISOString() : null,
     lastNotifiedAt: config.lastNotifiedAt ? config.lastNotifiedAt.toISOString() : null,
     createdAt: config.createdAt ? config.createdAt.toISOString() : null,
     updatedAt: config.updatedAt ? config.updatedAt.toISOString() : null,
     limits: {
-      maxKeywords: config.limits.maxKeywords,
-      maxSlots: config.limits.maxSlots
+      maxRedditCommunities: config.limits.maxRedditCommunities,
+      maxRedditKeywords: config.limits.maxRedditKeywords,
+      maxYoutubeKeywords: config.limits.maxYoutubeKeywords
     }
   };
 }

@@ -33,7 +33,7 @@ export class YoutubeRateLimitError extends Error {
   }
 }
 
-export class YoutubeQuotaManager {
+class YoutubeQuotaManager {
   private readonly apiKeys = youtubeConfig.apiKeys;
   private readonly minuteMap = new Map<string, MinuteWindow>();
   private readonly dailyMap = new Map<string, DailyUsageState>();

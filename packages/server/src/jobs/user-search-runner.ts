@@ -4,14 +4,17 @@ import { cronConfig } from '../config/cron.js';
 import { mailConfig } from '../config/mail.js';
 import {
   getUserFeedbackItemsByIds,
-  type UserFeedbackWithItem,
+  listUserUnnotifiedFeedback,
   markUserFeedbackItemsNotified,
-  type FeedbackEntity
+  type FeedbackEntity,
+  upsertFeedbackItems,
+  upsertUserFeedbackItems
 } from '../services/feedback-store.js';
 import {
-  computeNextRunAt,
+  computeNextAutoRunAt,
   getSupportedProviderPlatforms,
   listDueUserSearchConfigs,
+  resolveRedditCommunityName,
   updateExecutionMetadata,
   updateFeishuChannelStatus
 } from '../services/search-config.js';
@@ -24,6 +27,8 @@ import { getTierLimitsByStatus } from '../config/search-limits.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { YoutubeRateLimitError } from '../services/youtube/quota-manager.js';
 import { sendFeishuWebhookMessage, type FeishuWebhookPayload } from '../services/feishu.js';
+import { RedditProvider } from '../providers/reddit-provider.js';
+import type { FeedbackItem, Platform } from '../types/search.js';
 
 export type UserSearchJobResult = {
   processed: number;
@@ -44,11 +49,14 @@ const FEISHU_DATE_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
 
 const NUMBER_FORMATTER = new Intl.NumberFormat('zh-CN');
 const MAX_FEISHU_CARD_ITEMS = 5;
-const MAX_PUSH_ITEMS = 10;
-const YOUTUBE_RECENT_DAYS = 7;
-const YOUTUBE_MID_DAYS_START = 7;
-const YOUTUBE_MID_DAYS_END = 30;
+const MAX_PER_PLATFORM_PUSH_ITEMS = 5;
+const REDDIT_FETCH_INTERVAL_MS = 12 * 60 * 60 * 1000;
+const YOUTUBE_FETCH_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const REDDIT_BACKLOG_WINDOW_DAYS = 3;
+const YOUTUBE_BACKLOG_WINDOW_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+const redditProvider = new RedditProvider();
 
 export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<UserSearchJobResult> {
   const configs = await listDueUserSearchConfigs(now);
@@ -68,34 +76,49 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
     const userId = config.user_id;
     const logLabel = `[user-cron:${userId}]`;
     const tierLimits = getTierLimitsByStatus(config.user.status as Prisma.UserStatus);
-    const keywords = clampToLimit(config.keywords, tierLimits.maxKeywords);
-    const slots = clampToLimit(config.slots, tierLimits.maxSlots);
-    const activePlatforms = getSupportedProviderPlatforms(config.platforms);
 
-    if (keywords.length === 0 || slots.length === 0 || activePlatforms.length === 0) {
+    const activePlatforms = getSupportedProviderPlatforms(config.platforms);
+    const redditCommunities = clampToLimit(config.reddit_communities, tierLimits.maxRedditCommunities);
+    const redditKeywords = clampToLimit(config.reddit_keywords, tierLimits.maxRedditKeywords);
+    const youtubeKeywords = clampToLimit(config.youtube_keywords, tierLimits.maxYoutubeKeywords);
+
+    const hasRedditTarget = activePlatforms.includes('reddit') && redditCommunities.length > 0;
+    const hasYoutubeTarget = activePlatforms.includes('youtube') && youtubeKeywords.length > 0;
+
+    if (!hasRedditTarget && !hasYoutubeTarget) {
       skipped += 1;
-      const nextRun = computeNextRunAt(slots, config.timezone);
+      const nextRun = computeNextAutoRunAt({
+        platforms: activePlatforms,
+        redditCommunities,
+        youtubeKeywords,
+        redditLastRunAt: config.reddit_last_run_at ?? null,
+        youtubeLastRunAt: config.youtube_last_run_at ?? null,
+        now
+      });
+
       await updateExecutionMetadata({
         userId,
         nextRunAt: nextRun,
-        lastRunAt: now,
-        lastNotifiedAt: config.last_notified_at ?? null
+        lastNotifiedAt: config.last_notified_at ?? null,
+        redditLastRunAt: config.reddit_last_run_at ?? null,
+        youtubeLastRunAt: config.youtube_last_run_at ?? null
       });
+
       await recordNotifyJob({
         processStatus: 'success',
         totalNew: 0,
         totalSent: 0,
         userId,
         context: {
-          reason: activePlatforms.length === 0 ? 'no_supported_platform' : 'missing_keywords_or_slots',
+          reason: 'missing_platform_targets',
           platforms: config.platforms,
-          keywords,
-          slots
+          redditCommunities,
+          redditKeywords,
+          youtubeKeywords
         }
       });
-      console.warn(
-        `${logLabel} 跳过执行，原因=${activePlatforms.length === 0 ? '未选择受支持平台' : '关键词或时间未配置'}`
-      );
+
+      console.warn(`${logLabel} 跳过执行，原因=未配置可执行源`);
       continue;
     }
 
@@ -103,13 +126,18 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
     try {
       const langRegion = getLanguageRegionFromTimezone(config.timezone);
       const selection = await selectCandidates({
-        keywords,
-        platforms: activePlatforms,
+        activePlatforms,
         logLabel,
+        now,
+        redditCommunities,
+        redditKeywords,
         userId,
-        langRegion,
-        now
+        youtubeKeywords,
+        youtubeLastRunAt: config.youtube_last_run_at ?? null,
+        redditLastRunAt: config.reddit_last_run_at ?? null,
+        langRegion
       });
+
       const selectedItems = selection.selectedItems;
       const totalCandidates = selection.candidateCount;
       const successCount = selection.successCount;
@@ -125,12 +153,14 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
         lastSuccessAt: config.last_notified_at ?? null
       };
 
+      const allKeywords = mergeKeywordsForDisplay(youtubeKeywords, redditKeywords);
+
       const mailPayload = buildMailContent({
         items: selectedItems,
         summary,
         context: {
           platforms: activePlatforms.join(', '),
-          keywords: keywords.join(', '),
+          keywords: allKeywords.join(', '),
           recipient: config.notify_email
         }
       });
@@ -141,7 +171,8 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
       const allowEmptyNotification = mailConfig.sendWhenEmpty;
 
       const attemptEmail = shouldSendEmail && (hasNewItems || allowEmptyNotification);
-      const attemptFeishu = shouldSendFeishu && Boolean(config.feishu_webhook) && (hasNewItems || allowEmptyNotification);
+      const attemptFeishu =
+        shouldSendFeishu && Boolean(config.feishu_webhook) && (hasNewItems || allowEmptyNotification);
 
       let totalSent = 0;
       let messageId: string | undefined;
@@ -157,9 +188,7 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
           emailAccepted = sendResult.acceptedRecipients;
           messageId = sendResult.messageId;
           emailDelivered = emailAccepted > 0;
-          console.log(
-            `${logLabel} 邮件发送完成，messageId=${messageId ?? 'n/a'}，新增条数=${selectedItems.length}`
-          );
+          console.log(`${logLabel} 邮件发送完成，messageId=${messageId ?? 'n/a'}，新增条数=${selectedItems.length}`);
         } catch (error) {
           channelErrors.email = error instanceof Error ? error.message : String(error);
           console.error(`${logLabel} 邮件发送失败`, error);
@@ -179,7 +208,7 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
                 webhook: config.feishu_webhook!,
                 payload: buildFeishuCardPayload({
                   items: [item],
-                  keywords,
+                  keywords: allKeywords,
                   platforms: activePlatforms,
                   summary
                 })
@@ -219,7 +248,14 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
 
       totalSent = deliveredAny ? selectedItems.length : 0;
 
-      const nextRun = computeNextRunAt(slots, config.timezone);
+      const nextRun = computeNextAutoRunAt({
+        platforms: activePlatforms,
+        redditCommunities,
+        youtubeKeywords,
+        redditLastRunAt: selection.redditLastRunAt ?? config.reddit_last_run_at ?? null,
+        youtubeLastRunAt: selection.youtubeLastRunAt ?? config.youtube_last_run_at ?? null,
+        now: selection.finishedAt
+      });
       const shouldUpdateLastNotified = deliveredAny;
 
       if (shouldUpdateLastNotified && selectedItems.length > 0) {
@@ -229,15 +265,12 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
       await updateExecutionMetadata({
         userId,
         nextRunAt: nextRun,
-        lastRunAt: selection.finishedAt,
-        lastNotifiedAt: shouldUpdateLastNotified ? selection.finishedAt : config.last_notified_at ?? null
+        lastNotifiedAt: shouldUpdateLastNotified ? selection.finishedAt : config.last_notified_at ?? null,
+        redditLastRunAt: selection.redditLastRunAt ?? config.reddit_last_run_at ?? null,
+        youtubeLastRunAt: selection.youtubeLastRunAt ?? config.youtube_last_run_at ?? null
       });
 
-      const processStatus = failCount > 0
-        ? successCount > 0
-          ? ('partial' as const)
-          : ('failed' as const)
-        : ('success' as const);
+      const processStatus = failCount > 0 ? (successCount > 0 ? ('partial' as const) : ('failed' as const)) : ('success' as const);
 
       const notifyStatus =
         attemptedChannels === 0
@@ -258,8 +291,10 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
         userId,
         context: {
           platforms: config.platforms,
-          keywords,
-          slots,
+          keywords: allKeywords,
+          redditCommunities,
+          redditKeywords,
+          youtubeKeywords,
           notifyEmail: config.notify_email,
           notifyChannels: config.notify_channels,
           feishuConfigured: Boolean(config.feishu_webhook),
@@ -281,7 +316,13 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
             candidates: totalCandidates,
             selected: selectedItems.length,
             emailAccepted,
-            feishuMessagesSent
+            feishuMessagesSent,
+            redditSelected: selectedItems.filter((item) => item.platform === 'reddit').length,
+            youtubeSelected: selectedItems.filter((item) => item.platform === 'youtube').length
+          },
+          execution: {
+            redditRunAt: selection.redditLastRunAt ? formatISO(selection.redditLastRunAt) : null,
+            youtubeRunAt: selection.youtubeLastRunAt ? formatISO(selection.youtubeLastRunAt) : null
           },
           nextRunAt: nextRun ? formatISO(nextRun) : null
         }
@@ -291,14 +332,17 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
       const message = error instanceof Error ? error.message : String(error);
       console.error(`${logLabel} 执行失败`, error);
 
-      const nextRun = error instanceof YoutubeRateLimitError
-        ? new Date(now.getTime() + Math.max((error.retryAfterSeconds ?? 60) * 1000, 1000))
-        : computeNextRunAt(slots, config.timezone);
+      const nextRun =
+        error instanceof YoutubeRateLimitError
+          ? new Date(now.getTime() + Math.max((error.retryAfterSeconds ?? 60) * 1000, 1000))
+          : new Date(now.getTime() + 5 * 60 * 1000);
+
       await updateExecutionMetadata({
         userId,
         nextRunAt: nextRun,
-        lastRunAt: now,
-        lastNotifiedAt: config.last_notified_at ?? null
+        lastNotifiedAt: config.last_notified_at ?? null,
+        redditLastRunAt: config.reddit_last_run_at ?? null,
+        youtubeLastRunAt: config.youtube_last_run_at ?? null
       });
 
       await recordNotifyJob({
@@ -310,8 +354,10 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
         userId,
         context: {
           platforms: config.platforms,
-          keywords,
-          slots,
+          keywords: mergeKeywordsForDisplay(youtubeKeywords, redditKeywords),
+          redditCommunities,
+          redditKeywords,
+          youtubeKeywords,
           notifyEmail: config.notify_email,
           notifyChannels: config.notify_channels,
           feishuConfigured: Boolean(config.feishu_webhook),
@@ -319,23 +365,41 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
         }
       });
 
-      void notifyAlert('用户搜索配置任务失败', {
-        message,
-        userId,
-        keywords,
-        platforms: config.platforms
-      }, {
-        severity: 'warning',
-        dedupeKey: `user-cron:${userId}:error`,
-        tags: ['cron', 'user-config'],
-        source: 'user-search'
-      }).catch((alertError) => {
+      void notifyAlert(
+        '用户搜索配置任务失败',
+        {
+          message,
+          userId,
+          keywords: mergeKeywordsForDisplay(youtubeKeywords, redditKeywords),
+          platforms: config.platforms
+        },
+        {
+          severity: 'warning',
+          dedupeKey: `user-cron:${userId}:error`,
+          tags: ['cron', 'user-config'],
+          source: 'user-search'
+        }
+      ).catch((alertError) => {
         console.error(`${logLabel} 发送告警失败`, alertError);
       });
     }
   }
 
   return { processed, triggered, delivered, skipped, failed };
+}
+
+function mergeKeywordsForDisplay(youtubeKeywords: string[], redditKeywords: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const keyword of [...youtubeKeywords, ...redditKeywords]) {
+    const key = keyword.trim().toLowerCase();
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(keyword.trim());
+  }
+  return result;
 }
 
 function clampToLimit<T>(values: T[], limit: number): T[] {
@@ -464,7 +528,7 @@ function formatMetricForFeishu(item: FeedbackEntity): string | null {
   if (item.platform === 'youtube' && typeof item.view_count === 'number') {
     return NUMBER_FORMATTER.format(item.view_count);
   }
-  if (typeof item.score === 'number') {
+  if (item.platform === 'reddit' && typeof item.score === 'number') {
     return NUMBER_FORMATTER.format(item.score);
   }
   if (typeof item.comment_count === 'number') {
@@ -492,7 +556,9 @@ function escapeFeishuMarkdown(value: string): string {
   return value.replace(/([\\`*_{}\[\]()#+\-!>])/g, '\\$1');
 }
 
-function getLanguageRegionFromTimezone(timezone?: string | null): { relevanceLanguage?: string; regionCode?: string } | null {
+function getLanguageRegionFromTimezone(
+  timezone?: string | null
+): { relevanceLanguage?: string; regionCode?: string } | null {
   if (!timezone) return null;
   const map: Record<
     string,
@@ -533,129 +599,137 @@ type CandidateSelection = {
   finishedAt: Date;
   successCount: number;
   failCount: number;
+  redditLastRunAt: Date | null;
+  youtubeLastRunAt: Date | null;
 };
 
 async function selectCandidates(params: {
-  keywords: string[];
-  platforms: string[];
+  activePlatforms: Platform[];
   logLabel: string;
-  userId: string;
-  langRegion: { relevanceLanguage?: string; regionCode?: string } | null;
   now: Date;
+  redditCommunities: string[];
+  redditKeywords: string[];
+  userId: string;
+  youtubeKeywords: string[];
+  youtubeLastRunAt: Date | null;
+  redditLastRunAt: Date | null;
+  langRegion: { relevanceLanguage?: string; regionCode?: string } | null;
 }): Promise<CandidateSelection> {
   const startedAt = new Date();
-  const buckets: Record<'A' | 'B' | 'C', UserFeedbackWithItem[]> = { A: [], B: [], C: [] };
-  const seenIds = new Set<string>();
+  const processedIds = new Set<string>();
+
   let successCount = 0;
   let failCount = 0;
-
   let totalCreated = 0;
   let totalUpdated = 0;
   let userCreated = 0;
   let userUpdated = 0;
   let finishedAt = startedAt;
+  let redditLastRunAt = params.redditLastRunAt;
+  let youtubeLastRunAt = params.youtubeLastRunAt;
 
-  const addCandidates = async (processedIds: string[]) => {
-    if (processedIds.length === 0) return;
-    const items = await getUserFeedbackItemsByIds(params.userId, processedIds);
-    for (const item of items) {
-      if (item.last_notified_at) continue; // 已推送过
-      if (seenIds.has(item.feedback.id)) continue;
-      const priority = getMatchPriority((item.feedback.metadata as any)?.matchLevel);
-      if (priority > 5) continue; // 只保留相关 A–E
-      const published = item.feedback.published_at ?? item.feedback.first_seen_at ?? null;
-      const ageDays =
-        published != null ? Math.max(0, Math.floor((params.now.getTime() - published.getTime()) / DAY_MS)) : Number.MAX_SAFE_INTEGER;
-      if (ageDays <= YOUTUBE_RECENT_DAYS) {
-        buckets.A.push(item);
-      } else if (ageDays <= YOUTUBE_MID_DAYS_END) {
-        buckets.B.push(item);
-      } else {
-        buckets.C.push(item);
-      }
-      seenIds.add(item.feedback.id);
-    }
-  };
+  const shouldRunReddit =
+    params.activePlatforms.includes('reddit') &&
+    params.redditCommunities.length > 0 &&
+    isPlatformDue(params.redditLastRunAt, REDDIT_FETCH_INTERVAL_MS, params.now);
 
-  const windows: Array<{
-    label: 'recent' | 'mid' | 'old';
-    bucket: 'A' | 'B' | 'C';
-    publishedAfter?: string;
-    publishedBefore?: string;
-  }> = [
-    {
-      label: 'recent',
-      bucket: 'A',
-      publishedAfter: new Date(params.now.getTime() - YOUTUBE_RECENT_DAYS * DAY_MS).toISOString()
-    },
-    {
-      label: 'mid',
-      bucket: 'B',
-      publishedAfter: new Date(params.now.getTime() - YOUTUBE_MID_DAYS_END * DAY_MS).toISOString(),
-      publishedBefore: new Date(params.now.getTime() - YOUTUBE_MID_DAYS_START * DAY_MS).toISOString()
-    },
-    {
-      label: 'old',
-      bucket: 'C',
-      publishedBefore: new Date(params.now.getTime() - YOUTUBE_MID_DAYS_END * DAY_MS).toISOString()
-    }
-  ];
-
-  for (const window of windows) {
-    if (buckets.A.length + buckets.B.length + buckets.C.length >= MAX_PUSH_ITEMS && window.bucket !== 'A') {
-      break;
-    }
-    const result = await runKeywordSync({
-      keywords: params.keywords,
-      platforms: params.platforms,
+  if (shouldRunReddit) {
+    const redditRun = await runRedditCommunityIncremental({
+      userId: params.userId,
+      communities: params.redditCommunities,
+      keywords: params.redditKeywords,
       fetchLimit: cronConfig.fetchLimit,
-      logLabel: `${params.logLabel}[${window.label}]`,
+      logLabel: `${params.logLabel}[reddit]`
+    });
+
+    totalCreated += redditRun.created;
+    totalUpdated += redditRun.updated;
+    userCreated += redditRun.userCreated;
+    userUpdated += redditRun.userUpdated;
+    successCount += redditRun.successCount;
+    failCount += redditRun.failCount;
+    finishedAt = redditRun.finishedAt;
+    redditLastRunAt = redditRun.finishedAt;
+    redditRun.userProcessedIds.forEach((id) => processedIds.add(id));
+  }
+
+  const shouldRunYoutube =
+    params.activePlatforms.includes('youtube') &&
+    params.youtubeKeywords.length > 0 &&
+    isPlatformDue(params.youtubeLastRunAt, YOUTUBE_FETCH_INTERVAL_MS, params.now);
+
+  if (shouldRunYoutube) {
+    const youtubeResult = await runKeywordSync({
+      keywords: params.youtubeKeywords,
+      platforms: ['youtube'],
+      fetchLimit: cronConfig.fetchLimit,
+      logLabel: `${params.logLabel}[youtube]`,
       userId: params.userId,
       relevanceLanguage: params.langRegion?.relevanceLanguage,
       regionCode: params.langRegion?.regionCode,
       order: 'date',
-      publishedAfter: window.publishedAfter,
-      publishedBefore: window.publishedBefore,
+      publishedAfter: params.youtubeLastRunAt
+        ? new Date(params.youtubeLastRunAt.getTime() - 6 * 60 * 60 * 1000).toISOString()
+        : new Date(params.now.getTime() - 2 * DAY_MS).toISOString(),
       maxPages: 1
     });
-    totalCreated += result.created;
-    totalUpdated += result.updated;
-    userCreated += result.userCreated;
-    userUpdated += result.userUpdated;
-    successCount += result.stats.filter((item) => item.success).length;
-    failCount += result.stats.filter((item) => !item.success).length;
-    finishedAt = result.finishedAt;
-    await addCandidates(result.userProcessedIds ?? []);
-    if (buckets.A.length + buckets.B.length + buckets.C.length >= MAX_PUSH_ITEMS) {
-      break;
+
+    totalCreated += youtubeResult.created;
+    totalUpdated += youtubeResult.updated;
+    userCreated += youtubeResult.userCreated;
+    userUpdated += youtubeResult.userUpdated;
+    successCount += youtubeResult.stats.filter((item) => item.success).length;
+    failCount += youtubeResult.stats.filter((item) => !item.success).length;
+    finishedAt = youtubeResult.finishedAt;
+    youtubeLastRunAt = youtubeResult.finishedAt;
+    for (const id of youtubeResult.userProcessedIds ?? []) {
+      processedIds.add(id);
     }
   }
 
-  const sortBucket = (items: UserFeedbackWithItem[]): FeedbackEntity[] =>
-    [...items]
-      .map((item) => item.feedback)
-      .sort((a, b) => {
-        const viewDiff = (b.view_count ?? 0) - (a.view_count ?? 0);
-        if (viewDiff !== 0) return viewDiff;
-        const commentDiff = (b.comment_count ?? 0) - (a.comment_count ?? 0);
-        if (commentDiff !== 0) return commentDiff;
-        const dateA = a.published_at ? new Date(a.published_at).getTime() : 0;
-        const dateB = b.published_at ? new Date(b.published_at).getTime() : 0;
-        return dateB - dateA;
-      });
+  const processedRecords = await getUserFeedbackItemsByIds(params.userId, Array.from(processedIds));
 
-  const selectedItems: FeedbackEntity[] = [];
-  const orderBuckets: Array<'A' | 'B' | 'C'> = ['A', 'B', 'C'];
-  for (const bucket of orderBuckets) {
-    if (selectedItems.length >= MAX_PUSH_ITEMS) break;
-    const sorted = sortBucket(buckets[bucket]);
-    for (const item of sorted) {
-      if (selectedItems.length >= MAX_PUSH_ITEMS) break;
-      selectedItems.push(item);
+  const backlogSince = new Date(params.now.getTime() - Math.max(REDDIT_BACKLOG_WINDOW_DAYS, YOUTUBE_BACKLOG_WINDOW_DAYS) * DAY_MS);
+  const backlogRecords = await listUserUnnotifiedFeedback({
+    userId: params.userId,
+    platforms: params.activePlatforms,
+    since: backlogSince,
+    limit: 500
+  });
+
+  const allCandidateMap = new Map<string, FeedbackEntity>();
+  const communitySet = new Set(
+    params.redditCommunities
+      .map((item) => resolveRedditCommunityName(item)?.toLowerCase())
+      .filter((item): item is string => Boolean(item))
+  );
+  const redditKeywordSet = new Set(params.redditKeywords.map((item) => item.toLowerCase()));
+  const youtubeKeywordSet = new Set(params.youtubeKeywords.map((item) => item.toLowerCase()));
+
+  for (const record of [...processedRecords, ...backlogRecords]) {
+    const feedback = record.feedback;
+    if (record.last_notified_at) {
+      continue;
     }
+    if (!isRelevantCandidate(feedback, {
+      communitySet,
+      redditKeywordSet,
+      youtubeKeywordSet,
+      now: params.now
+    })) {
+      continue;
+    }
+    allCandidateMap.set(feedback.id, feedback);
   }
 
-  const candidateCount = buckets.A.length + buckets.B.length + buckets.C.length;
+  const allCandidates = Array.from(allCandidateMap.values());
+  const youtubeCandidates = allCandidates.filter((item) => item.platform === 'youtube');
+  const redditCandidates = allCandidates.filter((item) => item.platform === 'reddit');
+
+  const selectedYoutube = sortPlatformCandidates(youtubeCandidates).slice(0, MAX_PER_PLATFORM_PUSH_ITEMS);
+  const selectedReddit = sortPlatformCandidates(redditCandidates).slice(0, MAX_PER_PLATFORM_PUSH_ITEMS);
+
+  const selectedItems = [...selectedYoutube, ...selectedReddit];
 
   return {
     selectedItems,
@@ -665,34 +739,278 @@ async function selectCandidates(params: {
     userUpdated,
     startedAt,
     finishedAt,
-    candidateCount,
+    candidateCount: allCandidates.length,
     successCount,
-    failCount
+    failCount,
+    redditLastRunAt,
+    youtubeLastRunAt
   };
 }
 
-function chunkArray<T>(items: T[], size: number): T[][] {
-  if (size <= 0) return [items];
-  const result: T[][] = [];
-  for (let i = 0; i < items.length; i += size) {
-    result.push(items.slice(i, i + size));
+function sortPlatformCandidates(items: FeedbackEntity[]): FeedbackEntity[] {
+  return [...items].sort((a, b) => {
+    const priorityDiff = getMatchPriority((a.metadata as any)?.matchLevel) - getMatchPriority((b.metadata as any)?.matchLevel);
+    if (priorityDiff !== 0) {
+      return priorityDiff;
+    }
+
+    if (a.platform === 'youtube' || b.platform === 'youtube') {
+      const viewDiff = (b.view_count ?? 0) - (a.view_count ?? 0);
+      if (viewDiff !== 0) return viewDiff;
+    }
+
+    if (a.platform === 'reddit' || b.platform === 'reddit') {
+      const scoreDiff = (b.score ?? 0) - (a.score ?? 0);
+      if (scoreDiff !== 0) return scoreDiff;
+    }
+
+    const commentDiff = (b.comment_count ?? 0) - (a.comment_count ?? 0);
+    if (commentDiff !== 0) return commentDiff;
+
+    const dateA = a.published_at ? new Date(a.published_at).getTime() : 0;
+    const dateB = b.published_at ? new Date(b.published_at).getTime() : 0;
+    return dateB - dateA;
+  });
+}
+
+function isRelevantCandidate(
+  feedback: FeedbackEntity,
+  options: {
+    communitySet: Set<string>;
+    redditKeywordSet: Set<string>;
+    youtubeKeywordSet: Set<string>;
+    now: Date;
   }
-  return result;
+): boolean {
+  const ageMs = options.now.getTime() - (feedback.published_at?.getTime() ?? feedback.first_seen_at?.getTime() ?? 0);
+  if (feedback.platform === 'youtube') {
+    if (ageMs > YOUTUBE_BACKLOG_WINDOW_DAYS * DAY_MS) {
+      return false;
+    }
+    if (options.youtubeKeywordSet.size === 0) {
+      return false;
+    }
+    return options.youtubeKeywordSet.has((feedback.keyword ?? '').toLowerCase());
+  }
+
+  if (feedback.platform === 'reddit') {
+    if (ageMs > REDDIT_BACKLOG_WINDOW_DAYS * DAY_MS) {
+      return false;
+    }
+    const metadata = (feedback.metadata ?? {}) as Record<string, unknown>;
+    const labels = Array.isArray(metadata.labels)
+      ? metadata.labels.map((item) => String(item).toLowerCase())
+      : [];
+
+    const belongsToCommunity = labels.some((label) => options.communitySet.has(label));
+    if (!belongsToCommunity) {
+      return false;
+    }
+
+    if (options.redditKeywordSet.size === 0) {
+      return true;
+    }
+
+    return options.redditKeywordSet.has((feedback.keyword ?? '').toLowerCase());
+  }
+
+  return false;
+}
+
+function isPlatformDue(lastRunAt: Date | null, intervalMs: number, now: Date): boolean {
+  if (!lastRunAt) {
+    return true;
+  }
+  return now.getTime() - lastRunAt.getTime() >= intervalMs;
+}
+
+type CommunitySyncResult = {
+  created: number;
+  updated: number;
+  userCreated: number;
+  userUpdated: number;
+  userProcessedIds: string[];
+  successCount: number;
+  failCount: number;
+  finishedAt: Date;
+};
+
+async function runRedditCommunityIncremental(params: {
+  userId: string;
+  communities: string[];
+  keywords: string[];
+  fetchLimit: number;
+  logLabel: string;
+}): Promise<CommunitySyncResult> {
+  let created = 0;
+  let updated = 0;
+  let userCreated = 0;
+  let userUpdated = 0;
+  const userProcessedIds: string[] = [];
+  let successCount = 0;
+  let failCount = 0;
+  let finishedAt = new Date();
+
+  for (const source of params.communities) {
+    const subreddit = resolveRedditCommunityName(source);
+    if (!subreddit) {
+      failCount += 1;
+      console.warn(`${params.logLabel} 无法识别社区来源：${source}`);
+      continue;
+    }
+
+    try {
+      const result = await redditProvider.search({
+        query: `subreddit:${subreddit}`,
+        subreddit,
+        limit: params.fetchLimit
+      });
+
+      const scopedItems = matchRedditItemsByKeywords(result.items, params.keywords, subreddit);
+      if (scopedItems.length === 0) {
+        successCount += 1;
+        continue;
+      }
+
+      const groups = groupByKeyword(scopedItems);
+      for (const [keyword, items] of groups.entries()) {
+        const persist = await upsertFeedbackItems('reddit', keyword, items);
+        created += persist.created;
+        updated += persist.updated;
+
+        const userResult = await upsertUserFeedbackItems(
+          params.userId,
+          persist.processedItems.map((item) => ({
+            feedbackItemId: item.id,
+            seenAt: item.seenAt
+          }))
+        );
+
+        userCreated += userResult.created;
+        userUpdated += userResult.updated;
+        userProcessedIds.push(...userResult.processedIds);
+      }
+
+      successCount += 1;
+      finishedAt = new Date();
+      console.log(`${params.logLabel} 社区 r/${subreddit} 抓取 ${result.items.length} 条，匹配 ${scopedItems.length} 条`);
+    } catch (error) {
+      failCount += 1;
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`${params.logLabel} 社区 r/${subreddit} 执行失败：${message}`);
+    }
+  }
+
+  return {
+    created,
+    updated,
+    userCreated,
+    userUpdated,
+    userProcessedIds,
+    successCount,
+    failCount,
+    finishedAt
+  };
+}
+
+function groupByKeyword(items: FeedbackItem[]): Map<string, FeedbackItem[]> {
+  const grouped = new Map<string, FeedbackItem[]>();
+  for (const item of items) {
+    const key = item.keyword.trim();
+    const list = grouped.get(key) ?? [];
+    list.push(item);
+    grouped.set(key, list);
+  }
+  return grouped;
+}
+
+function matchRedditItemsByKeywords(items: FeedbackItem[], keywords: string[], subreddit: string): FeedbackItem[] {
+  if (keywords.length === 0) {
+    return items.map((item) => ({
+      ...item,
+      keyword: `r/${subreddit}`,
+      matchLevel: 'A'
+    }));
+  }
+
+  const scoped: FeedbackItem[] = [];
+  for (const item of items) {
+    const best = pickBestKeyword(item, keywords);
+    if (!best) {
+      continue;
+    }
+    scoped.push({
+      ...item,
+      keyword: best.keyword,
+      matchLevel: best.matchLevel
+    });
+  }
+  return scoped;
+}
+
+function pickBestKeyword(item: FeedbackItem, keywords: string[]): { keyword: string; matchLevel: string } | null {
+  let best: { keyword: string; matchLevel: string } | null = null;
+  let bestPriority = Number.MAX_SAFE_INTEGER;
+
+  for (const keyword of keywords) {
+    const matchLevel = computeMatchLevel(item, keyword);
+    const priority = getMatchPriority(matchLevel);
+    if (priority > 5) {
+      continue;
+    }
+    if (priority < bestPriority) {
+      bestPriority = priority;
+      best = { keyword, matchLevel };
+    }
+  }
+
+  return best;
+}
+
+function computeMatchLevel(item: FeedbackItem, keyword: string): string {
+  const phrase = keyword.trim().toLowerCase();
+  const words = phrase.split(/\s+/).filter(Boolean);
+
+  const title = item.title ?? '';
+  const description = item.description ?? '';
+  const tagsText = Array.isArray(item.tags) ? item.tags.join(' ') : '';
+
+  const containsPhrase = (text?: string | null) =>
+    Boolean(text && phrase && text.toLowerCase().includes(phrase));
+
+  const containsAllWords = (text?: string | null) => {
+    if (!text || words.length === 0) return false;
+    const lower = text.toLowerCase();
+    return words.every((word) => lower.includes(word));
+  };
+
+  const containsAnyWord = (text?: string | null) => {
+    if (!text || words.length === 0) return false;
+    const lower = text.toLowerCase();
+    return words.some((word) => lower.includes(word));
+  };
+
+  if (containsPhrase(title)) return 'A';
+  if (containsAllWords(title)) return 'B';
+  if (containsPhrase(tagsText) || containsAllWords(tagsText)) return 'C';
+  if (containsPhrase(description) || containsAllWords(description)) return 'D';
+  if (containsAnyWord(title) || containsAnyWord(tagsText) || containsAnyWord(description)) return 'E';
+  return 'F';
 }
 
 function getMatchPriority(matchLevel?: string | null): number {
   switch ((matchLevel ?? '').toUpperCase()) {
     case 'A':
-      return 1; // 标题包含短语
+      return 1;
     case 'B':
-      return 2; // 标题包含全部词
+      return 2;
     case 'C':
-      return 3; // 标签命中
+      return 3;
     case 'D':
-      return 4; // 描述命中
+      return 4;
     case 'E':
-      return 5; // 任意词命中
+      return 5;
     default:
-      return 99; // 无命中，丢弃
+      return 99;
   }
 }

@@ -6,11 +6,18 @@ packages/*/node_modules/
 dist/
 packages/*/dist/
 packages/web/build/
+packages/extension/.webstore-build/
+packages/server/dist-agent/
 
 # Vim/IDE 的缓存、编辑器配置
 .DS_Store
 *.swp
 *.log
+.cursor/
+.recovery/
+backups/
+__pycache__/
+**/__pycache__/
 
 # 环境变量文件（如需保密）
 .env
@@ -44,4 +51,3 @@ Thumbs.db
 # PM2/Nginx 日志（如果需要）
 *.log
 logs/
-

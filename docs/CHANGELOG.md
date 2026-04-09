@@ -10,21 +10,81 @@
   git checkout <tag> -- packages/extension/contentScript.js
   ```
 
-## 备份 2026-02-14
-- 版本号：`v2026.02.14-1`
-- 日期：2026-02-14
-- 范围：当前仓库完整快照
-- 说明：修改 Agent.pkg安装包，本地测试通过，本地能安装、字幕下载成功
-- 分支：`backup-20260214-1313`
-- Commit：`fbbc829`
+> 备份记录按日期倒序展示（最新在前）。
+
+## 备份 2026-03-28 (VoiceInsight Saas v1.0.0 基线)
+- 版本号：`VoiceInsight Saas v1.0.0`
+- 日期：2026-03-28
+- 范围：SaaS 平台源码与基础配置（`packages/web`、`packages/server`、`package.json`、`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`tsconfig.base.json`、`docker-compose.db.yml`）
+- 说明：VoiceInsight SaaS 平台首次完整备份（不含可重建产物 `node_modules/dist`）
+- 本地目录快照：`backups/voiceinsight-saas-backup-v1.0.0-20260328-102030`
+- 本地压缩包（zip）：`backups/archives/voiceinsight-saas-backup-v1.0.0-20260328-102030.zip`
+- 本地压缩包（tar.gz）：`backups/archives/voiceinsight-saas-backup-v1.0.0-20260328-102030.tar.gz`
+- 本地校验文件：`backups/voiceinsight-saas-backup-v1.0.0-20260328-102030/SHA256SUMS.txt`
+- 元信息：`backups/voiceinsight-saas-backup-v1.0.0-20260328-102030/backup.meta.json`
+- 本地分支：`backup/voiceinsight-saas-v1.0.0-20260328`
+- 本地 Tag：`backup-voiceinsight-saas-v1.0.0-20260328`
+- 本地 Commit：`13f6bb492c6cfe821b4025e6e09bac6da7ba0aa0`
+- 云端仓库（origin）：`git@github.com:hrduan08/Product_analysis.git`
+- 云端分支：`refs/heads/backup/voiceinsight-saas-v1.0.0-20260328`
+- 云端 Tag：`refs/tags/backup-voiceinsight-saas-v1.0.0-20260328`
+- 云端校验 Commit：`13f6bb492c6cfe821b4025e6e09bac6da7ba0aa0`（`git ls-remote` 已校验）
+
+## 备份 2026-03-28 (v1.1.0 Side Panel 上架版)
+- 版本号：`v1.1.0`
+- 日期：2026-03-28
+- 范围：`packages/extension` 完整快照
+- 说明：v1.1.0 插件上架版完整备份，用于故障一键回退
+- 本地目录快照：`backups/voiceinsight-extension-backup-v1.1.0-20260328-095241`
+- 本地压缩包（zip）：`backups/archives/voiceinsight-extension-backup-v1.1.0-20260328-095241.zip`
+- 本地压缩包（tar.gz）：`backups/archives/voiceinsight-extension-backup-v1.1.0-20260328-095241.tar.gz`
+- 本地校验文件：`backups/voiceinsight-extension-backup-v1.1.0-20260328-095241/SHA256SUMS.txt`
+- 本地分支：`backup/voiceinsight-extension-v1.1.0-sidepanel-20260328`
+- 本地 Tag：`backup-voiceinsight-extension-v1.1.0-sidepanel-20260328`
+- 本地 Commit：`a2964fecc79de3bb158f2c01b368eda1df79ac2b`
+- 云端仓库（origin）：`git@github.com:hrduan08/Product_analysis.git`
+- 云端分支：`refs/heads/backup/voiceinsight-extension-v1.1.0-sidepanel-20260328`
+- 云端 Tag：`refs/tags/backup-voiceinsight-extension-v1.1.0-sidepanel-20260328`
+- 云端校验 Commit：`a2964fecc79de3bb158f2c01b368eda1df79ac2b`（`git ls-remote` 已校验）
+
+## 备份 2026-03-08 (v1.0.4 Side Panel 改造前)
+- 版本号：`v1.0.4`
+- 日期：2026-03-08
+- 范围：`packages/extension` 完整快照
+- 说明：迁移 Side Panel 前的插件完整备份，用于故障一键回退
+- 本地分支：`backup/voiceinsight-extension-v1.0.4-pre-sidepanel-20260308`
+- 本地 Tag：`backup-voiceinsight-extension-v1.0.4-pre-sidepanel-20260308`
+- 本地 Commit：`ea15779248e72e882ce079328c4400f76d2c7f0c`
+- 云端仓库（origin）：`git@github.com:hrduan08/Product_analysis.git`
+- 云端分支：`refs/heads/backup/voiceinsight-extension-v1.0.4-pre-sidepanel-20260308`
+- 云端 Tag：`refs/tags/backup-voiceinsight-extension-v1.0.4-pre-sidepanel-20260308`
+- 云端校验 Commit：`ea15779248e72e882ce079328c4400f76d2c7f0c`（`git ls-remote` 已校验）
 
 ## 备份 2026-02-14-2
 - 版本号：`v2026.02.14-2`
 - 日期：2026-02-14
 - 范围：当前仓库完整快照（Agent 完整功能版本）
 - 说明：移除 Agent 方案前的完整功能备份
-- 分支：`backup-20260214-1713`
-- Commit：`0918671`
+- 本地分支：`backup-20260214-1713`
+- 本地 Tag：`无`
+- 本地 Commit：`ac4f7441a7781ae9d3cf861b5538c60b84352c14`
+- 云端仓库（origin）：`git@github.com:hrduan08/Product_analysis.git`
+- 云端分支：`未推送`（`git ls-remote --heads origin backup-20260214-1713` 无结果）
+- 云端 Tag：`无`
+- 云端校验 Commit：`未校验`
+
+## 备份 2026-02-14
+- 版本号：`v2026.02.14-1`
+- 日期：2026-02-14
+- 范围：当前仓库完整快照
+- 说明：修改 Agent.pkg安装包，本地测试通过，本地能安装、字幕下载成功
+- 本地分支：`backup-20260214-1313`
+- 本地 Tag：`无`
+- 本地 Commit：`fbbc829b7409c28d453b0abebee725625029bc31`
+- 云端仓库（origin）：`git@github.com:hrduan08/Product_analysis.git`
+- 云端分支：`未推送`（`git ls-remote --heads origin backup-20260214-1313` 无结果）
+- 云端 Tag：`无`
+- 云端校验 Commit：`未校验`
 
 ## v2026.02.14-3
 - 日期：2026-02-14

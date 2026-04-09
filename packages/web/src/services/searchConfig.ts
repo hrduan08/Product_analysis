@@ -3,8 +3,9 @@ import { API_BASE } from './api';
 export type SearchConfig = {
   userId: string;
   platforms: string[];
-  keywords: string[];
-  slots: string[];
+  redditCommunities: string[];
+  redditKeywords: string[];
+  youtubeKeywords: string[];
   notifyEmail: string;
   timezone: string;
   notifyChannels: string[];
@@ -12,7 +13,8 @@ export type SearchConfig = {
   feishuStatus: string | null;
   feishuLastTestedAt: string | null;
   nextRunAt: string | null;
-  lastRunAt: string | null;
+  redditLastRunAt: string | null;
+  youtubeLastRunAt: string | null;
   lastNotifiedAt: string | null;
   createdAt: string | null;
   updatedAt: string | null;
@@ -20,8 +22,9 @@ export type SearchConfig = {
 
 export type SearchConfigMeta = {
   supportedPlatforms: string[];
-  maxKeywords: number;
-  maxSlots: number;
+  maxRedditCommunities: number;
+  maxRedditKeywords: number;
+  maxYoutubeKeywords: number;
   defaultTimezone: string;
 };
 
@@ -33,8 +36,9 @@ export type SearchConfigResponse = {
 export type SearchConfigPatchPayload = {
   userId: string;
   platforms?: string[];
-  keywords?: string[];
-  slots?: string[];
+  redditCommunities?: string[];
+  redditKeywords?: string[];
+  youtubeKeywords?: string[];
   notifyEmail?: string;
   timezone?: string;
   notifyChannels?: string[];

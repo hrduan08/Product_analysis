@@ -10,7 +10,6 @@ export type TaskRun = {
   totalSent: number;
   keywords: string[];
   platforms: string[];
-  slots: string[];
   notifyChannels: string[];
   errorMessage: string | null;
 };

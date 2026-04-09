@@ -106,35 +106,6 @@ export async function upsertFeedbackItems(
   };
 }
 
-type NewItemsFilter = {
-  platforms?: Platform[];
-  keywords?: string[];
-};
-
-export async function getNewFeedbackItemsSince(
-  since: Date,
-  filter?: NewItemsFilter
-): Promise<FeedbackEntity[]> {
-  const where: Prisma.FeedbackItemWhereInput = {
-    first_seen_at: { gt: since }
-  };
-
-  if (filter?.platforms?.length) {
-    where.platform = { in: filter.platforms };
-  }
-
-  if (filter?.keywords?.length) {
-    where.keyword = { in: filter.keywords };
-  }
-
-  return prisma.feedbackItem.findMany({
-    where,
-    orderBy: {
-      first_seen_at: 'desc'
-    }
-  });
-}
-
 export async function upsertUserFeedbackItems(
   userId: string,
   items: Array<{ feedbackItemId: string; seenAt: Date }>
@@ -176,14 +147,6 @@ export async function upsertUserFeedbackItems(
   return { created, updated, createdIds, processedIds };
 }
 
-export async function getFeedbackItemsByIds(ids: string[]): Promise<FeedbackEntity[]> {
-  if (ids.length === 0) return [];
-  return prisma.feedbackItem.findMany({
-    where: { id: { in: ids } },
-    orderBy: { first_seen_at: 'desc' }
-  });
-}
-
 export type UserFeedbackWithItem = {
   feedback_item_id: string;
   last_notified_at: Date | null;
@@ -222,6 +185,68 @@ export async function getUserFeedbackItemsByIds(
         }
       }
     }
+  });
+
+  return records.map((record) => ({
+    feedback_item_id: record.feedback_item_id,
+    last_notified_at: record.last_notified_at ?? null,
+    feedback: record.feedbackItem as FeedbackEntity
+  }));
+}
+
+export async function listUserUnnotifiedFeedback(params: {
+  userId: string;
+  platforms?: Platform[];
+  since?: Date;
+  limit?: number;
+}): Promise<UserFeedbackWithItem[]> {
+  const where: Prisma.UserFeedbackItemWhereInput = {
+    user_id: params.userId,
+    last_notified_at: null
+  };
+
+  if (params.since || (params.platforms && params.platforms.length > 0)) {
+    where.feedbackItem = {};
+    if (params.since) {
+      where.feedbackItem.published_at = {
+        gte: params.since
+      };
+    }
+    if (params.platforms && params.platforms.length > 0) {
+      where.feedbackItem.platform = {
+        in: params.platforms
+      };
+    }
+  }
+
+  const records = await prisma.userFeedbackItem.findMany({
+    where,
+    include: {
+      feedbackItem: {
+        select: {
+          id: true,
+          platform: true,
+          external_id: true,
+          keyword: true,
+          title: true,
+          author: true,
+          url: true,
+          thumbnail_url: true,
+          permalink: true,
+          published_at: true,
+          first_seen_at: true,
+          last_seen_at: true,
+          view_count: true,
+          score: true,
+          comment_count: true,
+          metadata: true
+        }
+      }
+    },
+    orderBy: {
+      last_seen_at: 'desc'
+    },
+    take: params.limit ?? 200
   });
 
   return records.map((record) => ({

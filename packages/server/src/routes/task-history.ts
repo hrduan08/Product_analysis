@@ -41,7 +41,6 @@ router.get('/app/task-history', async (req, res, next) => {
         errorMessage: job.error_message ?? null,
         keywords: ensureStringArray(ctx.keywords),
         platforms: ensureStringArray(ctx.platforms),
-        slots: ensureStringArray(ctx.slots),
         notifyChannels: ensureStringArray(ctx.notifyChannels)
       };
     });

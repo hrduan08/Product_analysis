@@ -7,20 +7,30 @@ export type SearchTier = 'trial' | 'paid' | 'none';
 
 const unitsPerSearch = youtubeConfig.searchUnitsPerCall + youtubeConfig.videoUnitsPerCall;
 
-export const searchTierLimits: Record<SearchTier, { maxKeywords: number; maxSlots: number; unitsPerDay: number }> = {
+export type SearchTierLimits = {
+  maxRedditCommunities: number;
+  maxRedditKeywords: number;
+  maxYoutubeKeywords: number;
+  unitsPerDay: number;
+};
+
+export const searchTierLimits: Record<SearchTier, SearchTierLimits> = {
   trial: {
-    maxKeywords: 1,
-    maxSlots: 1,
+    maxRedditCommunities: 1,
+    maxRedditKeywords: 1,
+    maxYoutubeKeywords: 1,
     unitsPerDay: unitsPerSearch
   },
   paid: {
-    maxKeywords: 2,
-    maxSlots: 2,
-    unitsPerDay: 4 * unitsPerSearch // 2 keywords * 2 slots
+    maxRedditCommunities: 3,
+    maxRedditKeywords: 2,
+    maxYoutubeKeywords: 2,
+    unitsPerDay: 4 * unitsPerSearch
   },
   none: {
-    maxKeywords: 0,
-    maxSlots: 0,
+    maxRedditCommunities: 0,
+    maxRedditKeywords: 0,
+    maxYoutubeKeywords: 0,
     unitsPerDay: 0
   }
 };
@@ -35,13 +45,14 @@ export function resolveSearchTier(status: UserStatus): SearchTier {
   return 'none';
 }
 
-export function getTierLimitsByStatus(status: UserStatus): { tier: SearchTier; maxKeywords: number; maxSlots: number; unitsPerDay: number } {
+export function getTierLimitsByStatus(status: UserStatus): { tier: SearchTier } & SearchTierLimits {
   const tier = resolveSearchTier(status);
   const limits = searchTierLimits[tier];
   return {
     tier,
-    maxKeywords: limits.maxKeywords,
-    maxSlots: limits.maxSlots,
+    maxRedditCommunities: limits.maxRedditCommunities,
+    maxRedditKeywords: limits.maxRedditKeywords,
+    maxYoutubeKeywords: limits.maxYoutubeKeywords,
     unitsPerDay: limits.unitsPerDay
   };
 }
