@@ -58,6 +58,13 @@ export function SearchConfigPage(): JSX.Element {
   const [redditCommunityInput, setRedditCommunityInput] = useState('');
   const [redditKeywordInput, setRedditKeywordInput] = useState('');
   const [youtubeKeywordInput, setYoutubeKeywordInput] = useState('');
+  const [productWebsiteDraft, setProductWebsiteDraft] = useState('');
+  const [productCommerceDraft, setProductCommerceDraft] = useState('');
+  const [productDescriptionDraft, setProductDescriptionDraft] = useState('');
+  const [productBrandDraft, setProductBrandDraft] = useState('');
+  const [productNameDraft, setProductNameDraft] = useState('');
+  const [productCategoryDraft, setProductCategoryDraft] = useState('');
+  const [coreFeatureInput, setCoreFeatureInput] = useState('');
 
   const [emailDraft, setEmailDraft] = useState('');
   const [feishuDraft, setFeishuDraft] = useState('');
@@ -106,10 +113,15 @@ export function SearchConfigPage(): JSX.Element {
       loading: '页面加载中...',
       sectionPlatform: '1. 选择社媒平台',
       sectionPlatformDesc: '按平台分别配置监控规则。',
-      sectionReddit: '2. Reddit 设置',
+      sectionReddit: '2. Reddit 设置（Beta）',
       sectionYouTube: '3. YouTube 设置',
-      sectionNotify: '4. 消息通知',
+      sectionProduct: '4. 产品画像',
+      sectionNotify: '5. 消息通知',
       disabledHint: '当前未启用该平台',
+      betaBadge: 'Beta',
+      redditBetaAllowedHint: 'Reddit Beta 已对白名单账号开放，当前使用低频数据源过渡方案。',
+      redditBetaLockedHint: 'Reddit 仍处于 Beta 阶段，暂未对当前账号开放。',
+      redditProviderDisabledHint: 'Reddit 数据源暂未启用。',
       redditCommunities: '关注社区',
       redditCommunitiesDesc: '填写 Reddit 社区 URL（最多 3 个）。',
       redditCommunityPlaceholder: '例如：https://www.reddit.com/r/AppleWatch/',
@@ -119,6 +131,29 @@ export function SearchConfigPage(): JSX.Element {
       youtubeKeywords: '关键词发现',
       youtubeKeywordsDesc: 'YouTube 关键词全站发现（低频、有限额、best effort，每天最多 1 次）。',
       youtubeKeywordPlaceholder: '例如：Huawei Watch GT2 review',
+      productInfoDesc: '填写官网链接、电商平台链接和产品介绍后，系统会结合当前关键词自动生成目标产品范围画像，你也可以手动修改并保存。',
+      productWebsite: '官网链接',
+      productCommerce: '电商平台链接',
+      productDescription: '产品介绍',
+      productDescriptionPlaceholder: '例如：Amazfit Helio Strap 是一款聚焦恢复、睡眠监测、心率监测和运动洞察的可穿戴设备。',
+      productProfileStatus: '画像状态：',
+      productProfileBrand: '品牌',
+      productProfileName: '产品名',
+      productProfileCategory: '类别',
+      productProfileCoreFeatures: '核心特征',
+      productProfileGeneratedAt: '最近生成时间：',
+      addFeature: '添加特征',
+      emptyFeatures: '暂无核心特征',
+      saveProductSources: '保存并生成画像',
+      saveProductProfile: '保存画像修改',
+      productStatusIdle: '未生成',
+      productStatusPending: '生成中',
+      productStatusReady: '生成成功',
+      productStatusFailed: '生成失败',
+      productStatusManual: '已人工修改',
+      toastNeedProductSource: '请至少填写一个产品信息来源',
+      toastNeedFeature: '请先填写核心特征',
+      toastProductProfileSaved: '产品画像已保存',
       addCommunity: '添加社区',
       addKeyword: '添加关键词',
       notifyDesc: '不管选择 Reddit 或 YouTube，都统一在这里配置通知方式。',
@@ -152,6 +187,7 @@ export function SearchConfigPage(): JSX.Element {
       toastFeishuTestFail: '飞书测试通知发送失败，请稍后重试',
       toastNeedEmail: '邮箱不能为空',
       toastNeedNotifyChannel: '至少保留一个通知方式',
+      toastRedditBetaUnavailable: 'Reddit Beta 功能暂未开放，如需试用请联系 VoiceInsight 团队',
       labelFeishuStatus: '飞书状态：',
       emptyCommunities: '暂无社区',
       emptyKeywords: '暂无关键词'
@@ -162,10 +198,15 @@ export function SearchConfigPage(): JSX.Element {
       loading: 'Loading...',
       sectionPlatform: '1. Choose platforms',
       sectionPlatformDesc: 'Configure rules by platform.',
-      sectionReddit: '2. Reddit settings',
+      sectionReddit: '2. Reddit settings (Beta)',
       sectionYouTube: '3. YouTube settings',
-      sectionNotify: '4. Notifications',
+      sectionProduct: '4. Product profile',
+      sectionNotify: '5. Notifications',
       disabledHint: 'This platform is not enabled',
+      betaBadge: 'Beta',
+      redditBetaAllowedHint: 'Reddit Beta is enabled for allowlisted accounts and currently uses a low-frequency transitional source.',
+      redditBetaLockedHint: 'Reddit is still in Beta and is not open to this account yet.',
+      redditProviderDisabledHint: 'Reddit data source is not enabled.',
       redditCommunities: 'Communities',
       redditCommunitiesDesc: 'Add Reddit community URLs (up to 3).',
       redditCommunityPlaceholder: 'e.g. https://www.reddit.com/r/AppleWatch/',
@@ -175,6 +216,29 @@ export function SearchConfigPage(): JSX.Element {
       youtubeKeywords: 'Keyword discovery',
       youtubeKeywordsDesc: 'YouTube global keyword discovery (low-frequency, budgeted, best effort, max once/day).',
       youtubeKeywordPlaceholder: 'e.g. Huawei Watch GT2 review',
+      productInfoDesc: 'Add product links or description. We will auto-generate a product profile focused on the target product scope implied by your keywords, and you can edit it before saving.',
+      productWebsite: 'Official website URL',
+      productCommerce: 'Commerce URL',
+      productDescription: 'Product description',
+      productDescriptionPlaceholder: 'e.g. Amazfit Helio Strap is a wearable focused on recovery, sleep tracking, heart rate monitoring, and exercise insights.',
+      productProfileStatus: 'Profile status: ',
+      productProfileBrand: 'Brand',
+      productProfileName: 'Product name',
+      productProfileCategory: 'Category',
+      productProfileCoreFeatures: 'Core features',
+      productProfileGeneratedAt: 'Last generated: ',
+      addFeature: 'Add feature',
+      emptyFeatures: 'No core features yet',
+      saveProductSources: 'Save & generate profile',
+      saveProductProfile: 'Save profile edits',
+      productStatusIdle: 'Not generated',
+      productStatusPending: 'Generating',
+      productStatusReady: 'Generated',
+      productStatusFailed: 'Failed',
+      productStatusManual: 'Edited manually',
+      toastNeedProductSource: 'Please provide at least one product information source',
+      toastNeedFeature: 'Please enter a core feature first',
+      toastProductProfileSaved: 'Product profile saved',
       addCommunity: 'Add community',
       addKeyword: 'Add keyword',
       notifyDesc: 'Notification settings are shared by Reddit and YouTube.',
@@ -208,6 +272,7 @@ export function SearchConfigPage(): JSX.Element {
       toastFeishuTestFail: 'Failed to send Feishu test notification',
       toastNeedEmail: 'Email cannot be empty',
       toastNeedNotifyChannel: 'Keep at least one notification channel',
+      toastRedditBetaUnavailable: 'Reddit Beta is not open yet. Contact VoiceInsight to request access.',
       labelFeishuStatus: 'Feishu status: ',
       emptyCommunities: 'No communities yet',
       emptyKeywords: 'No keywords yet'
@@ -244,6 +309,12 @@ export function SearchConfigPage(): JSX.Element {
         setMeta(response.meta);
         setEmailDraft(response.config.notifyEmail);
         setFeishuDraft(response.config.feishuWebhook ?? '');
+        setProductWebsiteDraft(response.config.productWebsiteUrl ?? '');
+        setProductCommerceDraft(response.config.productCommerceUrl ?? '');
+        setProductDescriptionDraft(response.config.productDescription ?? '');
+        setProductBrandDraft(response.config.productProfile.brand ?? '');
+        setProductNameDraft(response.config.productProfile.productName ?? '');
+        setProductCategoryDraft(response.config.productProfile.category ?? '');
       } catch (error) {
         if (!cancelled) {
           const message = error instanceof Error ? error.message : TEXT.toastLoadFail;
@@ -298,6 +369,10 @@ export function SearchConfigPage(): JSX.Element {
   const maxRedditCommunities = meta?.maxRedditCommunities ?? 3;
   const maxRedditKeywords = meta?.maxRedditKeywords ?? 2;
   const maxYoutubeKeywords = meta?.maxYoutubeKeywords ?? 2;
+  const supportedPlatforms = new Set(meta?.supportedPlatforms ?? ['youtube']);
+  const redditProviderEnabled = supportedPlatforms.has('reddit');
+  const redditBetaAllowed = Boolean(meta?.redditBetaAllowed);
+  const canConfigureReddit = redditProviderEnabled && redditBetaAllowed;
 
   const accountStatusLabel = useMemo(() => {
     if (!user) return null;
@@ -341,6 +416,12 @@ export function SearchConfigPage(): JSX.Element {
       const updated = await patchSearchConfig({ userId: user.id, ...requestPayload });
       setConfig(updated);
       setEmailDraft(updated.notifyEmail);
+      setProductWebsiteDraft(updated.productWebsiteUrl ?? '');
+      setProductCommerceDraft(updated.productCommerceUrl ?? '');
+      setProductDescriptionDraft(updated.productDescription ?? '');
+      setProductBrandDraft(updated.productProfile.brand ?? '');
+      setProductNameDraft(updated.productProfile.productName ?? '');
+      setProductCategoryDraft(updated.productProfile.category ?? '');
       if ('feishuWebhook' in requestPayload) {
         setFeishuDraft(updated.feishuWebhook ?? '');
       }
@@ -349,6 +430,12 @@ export function SearchConfigPage(): JSX.Element {
       setConfig(previous);
       setEmailDraft(previous.notifyEmail);
       setFeishuDraft(previous.feishuWebhook ?? '');
+      setProductWebsiteDraft(previous.productWebsiteUrl ?? '');
+      setProductCommerceDraft(previous.productCommerceUrl ?? '');
+      setProductDescriptionDraft(previous.productDescription ?? '');
+      setProductBrandDraft(previous.productProfile.brand ?? '');
+      setProductNameDraft(previous.productProfile.productName ?? '');
+      setProductCategoryDraft(previous.productProfile.category ?? '');
       showToast(error instanceof Error ? error.message : TEXT.toastUpdateFail, 'error');
     } finally {
       setSaving(false);
@@ -357,6 +444,13 @@ export function SearchConfigPage(): JSX.Element {
 
   const handlePlatformToggle = async (platform: string) => {
     if (!config) return;
+    if (platform === 'reddit' && !canConfigureReddit) {
+      showToast(
+        redditProviderEnabled ? TEXT.toastRedditBetaUnavailable : TEXT.redditProviderDisabledHint,
+        'error'
+      );
+      return;
+    }
     const current = new Set(config.platforms);
     if (current.has(platform)) {
       current.delete(platform);
@@ -374,6 +468,10 @@ export function SearchConfigPage(): JSX.Element {
   const handleAddRedditCommunity = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!config) return;
+    if (!canConfigureReddit) {
+      showToast(TEXT.toastRedditBetaUnavailable, 'error');
+      return;
+    }
     const raw = redditCommunityInput.trim();
     if (!raw) {
       showToast(TEXT.toastCommunityNeed, 'error');
@@ -409,6 +507,10 @@ export function SearchConfigPage(): JSX.Element {
   const handleAddRedditKeyword = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!config) return;
+    if (!canConfigureReddit) {
+      showToast(TEXT.toastRedditBetaUnavailable, 'error');
+      return;
+    }
     const value = redditKeywordInput.trim();
     if (!value) {
       showToast(TEXT.toastKeywordNeed, 'error');
@@ -460,6 +562,86 @@ export function SearchConfigPage(): JSX.Element {
     if (!config) return;
     const next = config.youtubeKeywords.filter((item) => item !== keyword);
     await applyPatch({ youtubeKeywords: next }, { youtubeKeywords: next });
+  };
+
+  const handleProductSourceSubmit = async () => {
+    if (!config) return;
+    const productWebsiteUrl = productWebsiteDraft.trim();
+    const productCommerceUrl = productCommerceDraft.trim();
+    const productDescription = productDescriptionDraft.trim();
+    if (!productWebsiteUrl && !productCommerceUrl && !productDescription) {
+      showToast(TEXT.toastNeedProductSource, 'error');
+      return;
+    }
+    await applyPatch(
+      {
+        productWebsiteUrl,
+        productCommerceUrl,
+        productDescription
+      },
+      {
+        productWebsiteUrl,
+        productCommerceUrl,
+        productDescription
+      }
+    );
+  };
+
+  const handleAddCoreFeature = () => {
+    if (!config) return;
+    const value = coreFeatureInput.trim();
+    if (!value) {
+      showToast(TEXT.toastNeedFeature, 'error');
+      return;
+    }
+    const exists = config.productProfile.coreFeatures.some((item) => item.toLowerCase() === value.toLowerCase());
+    if (exists) {
+      setCoreFeatureInput('');
+      return;
+    }
+    setConfig({
+      ...config,
+      productProfile: {
+        ...config.productProfile,
+        coreFeatures: [...config.productProfile.coreFeatures, value]
+      }
+    });
+    setCoreFeatureInput('');
+  };
+
+  const handleRemoveCoreFeature = (feature: string) => {
+    if (!config) return;
+    setConfig({
+      ...config,
+      productProfile: {
+        ...config.productProfile,
+        coreFeatures: config.productProfile.coreFeatures.filter((item) => item !== feature)
+      }
+    });
+  };
+
+  const handleSaveProductProfile = async () => {
+    if (!config) return;
+    const nextProfile = {
+      brand: productBrandDraft.trim(),
+      productName: productNameDraft.trim(),
+      category: productCategoryDraft.trim(),
+      coreFeatures: config.productProfile.coreFeatures
+    };
+
+    await applyPatch(
+      {
+        productProfile: {
+          ...config.productProfile,
+          ...nextProfile,
+          status: 'manual',
+          updatedByUser: true
+        }
+      },
+      {
+        productProfile: nextProfile
+      }
+    );
   };
 
   const handleChannelToggle = async (channel: 'email' | 'feishu') => {
@@ -727,6 +909,29 @@ export function SearchConfigPage(): JSX.Element {
       : 'Not tested';
   const feishuWebhookDirty =
     feishuDraft.trim() !== (config?.feishuWebhook ? config.feishuWebhook.trim() : '');
+  const productSourceDirty =
+    productWebsiteDraft.trim() !== (config.productWebsiteUrl?.trim() ?? '') ||
+    productCommerceDraft.trim() !== (config.productCommerceUrl?.trim() ?? '') ||
+    productDescriptionDraft.trim() !== (config.productDescription?.trim() ?? '');
+  const productProfileDirty =
+    productBrandDraft.trim() !== (config.productProfile.brand?.trim() ?? '') ||
+    productNameDraft.trim() !== (config.productProfile.productName?.trim() ?? '') ||
+    productCategoryDraft.trim() !== (config.productProfile.category?.trim() ?? '');
+  const productProfileStatusLabel =
+    config.productProfile.updatedByUser
+      ? TEXT.productStatusManual
+      : config.productProfile.status === 'pending'
+        ? TEXT.productStatusPending
+        : config.productProfile.status === 'ready'
+          ? TEXT.productStatusReady
+          : config.productProfile.status === 'failed'
+            ? TEXT.productStatusFailed
+            : TEXT.productStatusIdle;
+  const productGeneratedAtDisplay = config.productProfile.generatedAt
+    ? new Date(config.productProfile.generatedAt).toLocaleString()
+    : lang === 'zh'
+      ? '尚未生成'
+      : 'Not generated';
 
   return (
     <>
@@ -747,18 +952,33 @@ export function SearchConfigPage(): JSX.Element {
             <h3>{TEXT.sectionPlatform}</h3>
             <p className="config-section__hint">{TEXT.sectionPlatformDesc}</p>
             <div className="platform-toggle">
-              {PLATFORM_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={`platform-option ${config.platforms.includes(option.value) ? 'active' : ''}`}
-                  onClick={() => void handlePlatformToggle(option.value)}
-                  disabled={saving}
-                >
-                  {option.label}
-                </button>
-              ))}
+              {PLATFORM_OPTIONS.map((option) => {
+                const isReddit = option.value === 'reddit';
+                const locked = isReddit && !canConfigureReddit;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`platform-option ${config.platforms.includes(option.value) ? 'active' : ''}`}
+                    onClick={() => void handlePlatformToggle(option.value)}
+                    disabled={saving || locked}
+                    title={locked ? (redditProviderEnabled ? TEXT.redditBetaLockedHint : TEXT.redditProviderDisabledHint) : undefined}
+                  >
+                    <span className="platform-option__content">
+                      {option.label}
+                      {isReddit ? <span className="platform-option__badge">{TEXT.betaBadge}</span> : null}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
+            <p className="config-section__hint">
+              {!redditProviderEnabled
+                ? TEXT.redditProviderDisabledHint
+                : redditBetaAllowed
+                  ? TEXT.redditBetaAllowedHint
+                  : TEXT.redditBetaLockedHint}
+            </p>
           </section>
 
           <section className="config-section">
@@ -766,7 +986,11 @@ export function SearchConfigPage(): JSX.Element {
               <h3>{TEXT.sectionReddit}</h3>
               <span className="config-section__hint">{`Max ${maxRedditCommunities} communities / ${maxRedditKeywords} keywords`}</span>
             </div>
-            {!config.platforms.includes('reddit') ? (
+            {!canConfigureReddit ? (
+              <p className="config-section__hint">
+                {redditProviderEnabled ? TEXT.redditBetaLockedHint : TEXT.redditProviderDisabledHint}
+              </p>
+            ) : !config.platforms.includes('reddit') ? (
               <p className="config-section__hint">{TEXT.disabledHint}</p>
             ) : (
               <>
@@ -879,6 +1103,118 @@ export function SearchConfigPage(): JSX.Element {
                 </form>
               </>
             )}
+          </section>
+
+          <section className="config-section">
+            <h3>{TEXT.sectionProduct}</h3>
+            <p className="config-section__hint">{TEXT.productInfoDesc}</p>
+            <div className="config-inline-form config-inline-form--single">
+              <input
+                type="url"
+                value={productWebsiteDraft}
+                onChange={(event) => setProductWebsiteDraft(event.target.value)}
+                placeholder={TEXT.productWebsite}
+                disabled={saving}
+              />
+            </div>
+            <div className="config-inline-form config-inline-form--single">
+              <input
+                type="url"
+                value={productCommerceDraft}
+                onChange={(event) => setProductCommerceDraft(event.target.value)}
+                placeholder={TEXT.productCommerce}
+                disabled={saving}
+              />
+            </div>
+            <div className="config-inline-form config-inline-form--single">
+              <textarea
+                value={productDescriptionDraft}
+                onChange={(event) => setProductDescriptionDraft(event.target.value)}
+                placeholder={TEXT.productDescriptionPlaceholder}
+                disabled={saving}
+                rows={4}
+              />
+            </div>
+            <div className="config-inline-form config-inline-form--single">
+              <button type="button" onClick={() => void handleProductSourceSubmit()} disabled={saving || !productSourceDirty}>
+                {TEXT.saveProductSources}
+              </button>
+            </div>
+            <p className="config-section__hint">
+              {TEXT.productProfileStatus}
+              {productProfileStatusLabel} · {TEXT.productProfileGeneratedAt}
+              {productGeneratedAtDisplay}
+            </p>
+            {config.productProfile.error ? (
+              <p className="config-section__hint" style={{ color: '#d14343' }}>
+                {config.productProfile.error}
+              </p>
+            ) : null}
+            <div className="config-inline-form config-inline-form--single">
+              <input
+                type="text"
+                value={productBrandDraft}
+                onChange={(event) => setProductBrandDraft(event.target.value)}
+                placeholder={TEXT.productProfileBrand}
+                disabled={saving}
+              />
+            </div>
+            <div className="config-inline-form config-inline-form--single">
+              <input
+                type="text"
+                value={productNameDraft}
+                onChange={(event) => setProductNameDraft(event.target.value)}
+                placeholder={TEXT.productProfileName}
+                disabled={saving}
+              />
+            </div>
+            <div className="config-inline-form config-inline-form--single">
+              <input
+                type="text"
+                value={productCategoryDraft}
+                onChange={(event) => setProductCategoryDraft(event.target.value)}
+                placeholder={TEXT.productProfileCategory}
+                disabled={saving}
+              />
+            </div>
+
+            <p className="config-section__hint">{TEXT.productProfileCoreFeatures}</p>
+            <div className="config-chip-list">
+              {config.productProfile.coreFeatures.map((feature) => (
+                <span key={feature} className="config-chip">
+                  {feature}
+                  <button
+                    type="button"
+                    className="config-chip__remove"
+                    onClick={() => handleRemoveCoreFeature(feature)}
+                    disabled={saving}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              {config.productProfile.coreFeatures.length === 0 ? (
+                <span className="config-empty">{TEXT.emptyFeatures}</span>
+              ) : null}
+            </div>
+            <div className="config-inline-form">
+              <input
+                type="text"
+                value={coreFeatureInput}
+                onChange={(event) => setCoreFeatureInput(event.target.value)}
+                placeholder={TEXT.productProfileCoreFeatures}
+                disabled={saving}
+              />
+              <button type="button" onClick={handleAddCoreFeature} disabled={saving}>
+                {TEXT.addFeature}
+              </button>
+            </div>
+
+            <div className="config-inline-form config-inline-form--single">
+              <button type="button" onClick={() => void handleSaveProductProfile()} disabled={saving || !productProfileDirty}>
+                {TEXT.saveProductProfile}
+              </button>
+            </div>
           </section>
 
           <section className="config-section">

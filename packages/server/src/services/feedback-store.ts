@@ -108,7 +108,7 @@ export async function upsertFeedbackItems(
 
 export async function upsertUserFeedbackItems(
   userId: string,
-  items: Array<{ feedbackItemId: string; seenAt: Date }>
+  items: Array<{ feedbackItemId: string; seenAt: Date; matchedKeywords?: string[] }>
 ): Promise<{ created: number; updated: number; createdIds: string[]; processedIds: string[] }> {
   let created = 0;
   let updated = 0;
@@ -118,18 +118,22 @@ export async function upsertUserFeedbackItems(
   for (const entry of items) {
     const exists = await prisma.userFeedbackItem.findUnique({
       where: { user_id_feedback_item_id: { user_id: userId, feedback_item_id: entry.feedbackItemId } },
-      select: { feedback_item_id: true }
+      select: { feedback_item_id: true, matched_keywords: true }
     });
+
+    const matchedKeywords = mergeKeywords(exists?.matched_keywords ?? [], entry.matchedKeywords ?? []);
 
     await prisma.userFeedbackItem.upsert({
       where: { user_id_feedback_item_id: { user_id: userId, feedback_item_id: entry.feedbackItemId } },
       create: {
         user_id: userId,
         feedback_item_id: entry.feedbackItemId,
+        matched_keywords: matchedKeywords,
         first_seen_at: entry.seenAt,
         last_seen_at: entry.seenAt
       },
       update: {
+        matched_keywords: matchedKeywords,
         last_seen_at: entry.seenAt
       }
     });
@@ -149,7 +153,12 @@ export async function upsertUserFeedbackItems(
 
 export type UserFeedbackWithItem = {
   feedback_item_id: string;
+  matched_keywords: string[];
   last_notified_at: Date | null;
+  profile_filter_status: string | null;
+  profile_filter_score: number | null;
+  profile_filter_reason: string | null;
+  profile_filtered_at: Date | null;
   feedback: FeedbackEntity;
 };
 
@@ -189,7 +198,12 @@ export async function getUserFeedbackItemsByIds(
 
   return records.map((record) => ({
     feedback_item_id: record.feedback_item_id,
+    matched_keywords: record.matched_keywords,
     last_notified_at: record.last_notified_at ?? null,
+    profile_filter_status: record.profile_filter_status ?? null,
+    profile_filter_score: record.profile_filter_score ?? null,
+    profile_filter_reason: record.profile_filter_reason ?? null,
+    profile_filtered_at: record.profile_filtered_at ?? null,
     feedback: record.feedbackItem as FeedbackEntity
   }));
 }
@@ -198,12 +212,19 @@ export async function listUserUnnotifiedFeedback(params: {
   userId: string;
   platforms?: Platform[];
   since?: Date;
+  seenSince?: Date;
   limit?: number;
 }): Promise<UserFeedbackWithItem[]> {
   const where: Prisma.UserFeedbackItemWhereInput = {
     user_id: params.userId,
     last_notified_at: null
   };
+
+  if (params.seenSince) {
+    where.last_seen_at = {
+      gte: params.seenSince
+    };
+  }
 
   if (params.since || (params.platforms && params.platforms.length > 0)) {
     where.feedbackItem = {};
@@ -251,9 +272,44 @@ export async function listUserUnnotifiedFeedback(params: {
 
   return records.map((record) => ({
     feedback_item_id: record.feedback_item_id,
+    matched_keywords: record.matched_keywords,
     last_notified_at: record.last_notified_at ?? null,
+    profile_filter_status: record.profile_filter_status ?? null,
+    profile_filter_score: record.profile_filter_score ?? null,
+    profile_filter_reason: record.profile_filter_reason ?? null,
+    profile_filtered_at: record.profile_filtered_at ?? null,
     feedback: record.feedbackItem as FeedbackEntity
   }));
+}
+
+export async function updateUserFeedbackFilterResults(
+  userId: string,
+  items: Array<{
+    feedbackItemId: string;
+    status: string;
+    score?: number | null;
+    reason?: string | null;
+    filteredAt?: Date;
+  }>
+): Promise<void> {
+  if (items.length === 0) return;
+
+  for (const item of items) {
+    await prisma.userFeedbackItem.update({
+      where: {
+        user_id_feedback_item_id: {
+          user_id: userId,
+          feedback_item_id: item.feedbackItemId
+        }
+      },
+      data: {
+        profile_filter_status: item.status,
+        profile_filter_score: item.score ?? null,
+        profile_filter_reason: item.reason ?? null,
+        profile_filtered_at: item.filteredAt ?? new Date()
+      }
+    });
+  }
 }
 
 export async function markUserFeedbackItemsNotified(userId: string, feedbackItemIds: string[]): Promise<void> {
@@ -290,6 +346,32 @@ function buildMetadata(item: FeedbackItem): Prisma.JsonObject | null {
   if (item.matchLevel) {
     metadata.matchLevel = item.matchLevel;
   }
+  if (item.description) {
+    metadata.description = item.description;
+  }
+  if (item.tags && item.tags.length > 0) {
+    metadata.tags = item.tags;
+  }
 
   return Object.keys(metadata).length > 0 ? metadata : null;
+}
+
+function mergeKeywords(existing: string[], incoming: string[]): string[] {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+
+  for (const keyword of [...existing, ...incoming]) {
+    const trimmed = keyword.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    merged.push(trimmed);
+  }
+
+  return merged;
 }

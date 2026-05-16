@@ -3111,6 +3111,22 @@ body {
   transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
+.platform-option__content {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.platform-option__badge {
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+}
+
 .platform-option.active {
   background: #ffffff;
   color: #2563eb;

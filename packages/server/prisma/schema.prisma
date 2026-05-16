@@ -246,6 +246,18 @@ model UserSearchConfig {
   reddit_communities String[] @default([])
   reddit_keywords  String[]  @default([])
   youtube_keywords String[]  @default([])
+  product_website_url String?
+  product_commerce_url String?
+  product_description String?
+  product_profile_status String? @default("idle")
+  product_profile_error String?
+  product_profile_generated_at DateTime? @db.Timestamptz(6)
+  product_profile_updated_by_user Boolean @default(false)
+  product_profile_brand String?
+  product_profile_product_name String?
+  product_profile_category String?
+  product_profile_core_features String[] @default([])
+  product_profile_competitors String[] @default([])
   notify_email    String
   timezone        String    @default("Asia/Shanghai")
   notify_channels String[]  @default(["feishu"])
@@ -392,9 +404,14 @@ model PaymentOrder {
 model UserFeedbackItem {
   user_id          String   @db.Uuid
   feedback_item_id String   @db.Uuid
+  matched_keywords String[] @default([])
   first_seen_at    DateTime @default(now()) @db.Timestamptz(6)
   last_seen_at     DateTime @default(now()) @db.Timestamptz(6)
   last_notified_at DateTime? @db.Timestamptz(6)
+  profile_filter_status String? @default("pending")
+  profile_filter_score  Float?
+  profile_filter_reason String?
+  profile_filtered_at   DateTime? @db.Timestamptz(6)
 
   user         User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
   feedbackItem FeedbackItem @relation(fields: [feedback_item_id], references: [id], onDelete: Cascade)

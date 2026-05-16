@@ -8,6 +8,19 @@ export type SearchConfig = {
   youtubeKeywords: string[];
   notifyEmail: string;
   timezone: string;
+  productWebsiteUrl: string;
+  productCommerceUrl: string;
+  productDescription: string;
+  productProfile: {
+    status: string;
+    error: string | null;
+    generatedAt: string | null;
+    updatedByUser: boolean;
+    brand: string;
+    productName: string;
+    category: string;
+    coreFeatures: string[];
+  };
   notifyChannels: string[];
   feishuWebhook: string;
   feishuStatus: string | null;
@@ -26,6 +39,7 @@ export type SearchConfigMeta = {
   maxRedditKeywords: number;
   maxYoutubeKeywords: number;
   defaultTimezone: string;
+  redditBetaAllowed: boolean;
 };
 
 export type SearchConfigResponse = {
@@ -39,6 +53,15 @@ export type SearchConfigPatchPayload = {
   redditCommunities?: string[];
   redditKeywords?: string[];
   youtubeKeywords?: string[];
+  productWebsiteUrl?: string;
+  productCommerceUrl?: string;
+  productDescription?: string;
+  productProfile?: {
+    brand?: string;
+    productName?: string;
+    category?: string;
+    coreFeatures?: string[];
+  };
   notifyEmail?: string;
   timezone?: string;
   notifyChannels?: string[];

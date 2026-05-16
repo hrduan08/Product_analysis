@@ -6,11 +6,13 @@ import { createHttpError } from '../utils/http-error.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import {
   filterEnabledProviderPlatforms,
-  getSelectableSearchPlatforms
+  getSelectableSearchPlatforms,
+  isRedditBetaUserAllowed
 } from '../config/platforms.js';
 import type { Platform } from '../types/search.js';
 import { getTierLimitsByStatus } from '../config/search-limits.js';
 import { buildFeishuTextPayload, sendFeishuWebhookMessage } from './feishu.js';
+import { generateAndPersistProductProfile } from './product-profile.js';
 
 const DEFAULT_PLATFORMS: string[] = ['youtube'];
 const SUPPORTED_SELECTION_PLATFORMS = ['youtube', 'reddit', 'x', 'facebook'] as const;
@@ -18,15 +20,17 @@ const MAX_REDDIT_COMMUNITIES = 3;
 const MAX_REDDIT_KEYWORDS = 2;
 const MAX_YOUTUBE_KEYWORDS = 2;
 const DEFAULT_TIMEZONE = 'Asia/Shanghai';
-const AUTO_SCHEDULE_JITTER_SECONDS = Math.max(Number(process.env.USER_SEARCH_AUTO_JITTER_SECONDS ?? '120'), 0);
-const AUTO_REDDIT_INTERVAL_MINUTES = Math.max(
+const AUTO_SCHEDULE_JITTER_SECONDS = Math.max(Number(process.env.USER_SEARCH_AUTO_JITTER_SECONDS ?? '3600'), 0);
+export const USER_SEARCH_REDDIT_INTERVAL_MINUTES = Math.max(
   Number(process.env.USER_SEARCH_REDDIT_INTERVAL_MINUTES ?? '720'),
   1
 );
-const AUTO_YOUTUBE_INTERVAL_MINUTES = Math.max(
+export const USER_SEARCH_YOUTUBE_INTERVAL_MINUTES = Math.max(
   Number(process.env.USER_SEARCH_YOUTUBE_INTERVAL_MINUTES ?? '1440'),
   1
 );
+export const USER_SEARCH_REDDIT_INTERVAL_MS = USER_SEARCH_REDDIT_INTERVAL_MINUTES * 60 * 1000;
+export const USER_SEARCH_YOUTUBE_INTERVAL_MS = USER_SEARCH_YOUTUBE_INTERVAL_MINUTES * 60 * 1000;
 const AUTO_SOON_MIN_SECONDS = Math.max(
   Number(process.env.USER_SEARCH_AUTO_SOON_MIN_SECONDS ?? '30'),
   0
@@ -73,7 +77,18 @@ const patchSchema = z
           value === '' ||
           value.startsWith('https://open.feishu.cn/open-apis/bot/'),
         '请填写以 https://open.feishu.cn/open-apis/bot/ 开头的 Webhook URL'
-      )
+      ),
+    productWebsiteUrl: z.string().trim().url('官网链接格式不正确').optional().or(z.literal('')),
+    productCommerceUrl: z.string().trim().url('电商链接格式不正确').optional().or(z.literal('')),
+    productDescription: z.string().trim().max(5000, '产品介绍请控制在 5000 字内').optional(),
+    productProfile: z
+      .object({
+        brand: z.string().trim().max(120).optional(),
+        productName: z.string().trim().max(200).optional(),
+        category: z.string().trim().max(120).optional(),
+        coreFeatures: z.array(z.string().trim().min(1).max(120)).max(20).optional()
+      })
+      .optional()
   })
   .strict();
 
@@ -87,6 +102,19 @@ export type UserSearchConfigRecord = {
   youtubeKeywords: string[];
   notifyEmail: string;
   timezone: string;
+  productWebsiteUrl: string;
+  productCommerceUrl: string;
+  productDescription: string;
+    productProfile: {
+      status: string;
+      error: string | null;
+      generatedAt: Date | null;
+      updatedByUser: boolean;
+      brand: string;
+      productName: string;
+      category: string;
+      coreFeatures: string[];
+    };
   notifyChannels: string[];
   feishuWebhook: string;
   feishuStatus: string | null;
@@ -102,6 +130,9 @@ export type UserSearchConfigRecord = {
     maxRedditKeywords: number;
     maxYoutubeKeywords: number;
   };
+  meta: {
+    redditBetaAllowed: boolean;
+  };
 };
 
 type FeishuStatus = 'ok' | 'failed';
@@ -112,6 +143,20 @@ export function getSelectablePlatforms(): string[] {
 
 export function getSupportedProviderPlatforms(platforms: string[]): Platform[] {
   return filterEnabledProviderPlatforms(platforms);
+}
+
+export function getSupportedProviderPlatformsForUser(
+  platforms: string[],
+  userEmail: string | null | undefined
+): Platform[] {
+  return filterEnabledProviderPlatforms(platforms, {
+    userEmail,
+    enforceRedditWhitelist: true
+  });
+}
+
+export function canUseRedditBeta(email: string | null | undefined): boolean {
+  return isRedditBetaUserAllowed(email);
 }
 
 export function resolveRedditCommunityName(input: string): string | null {
@@ -163,6 +208,7 @@ export async function getUserSearchConfig(userId: string): Promise<UserSearchCon
   }
 
   const tierLimits = getTierLimitsByStatus(user.status as Prisma.UserStatus);
+  const redditBetaAllowed = canUseRedditBeta(user.email);
 
   if (!user.searchConfig) {
     return {
@@ -173,6 +219,19 @@ export async function getUserSearchConfig(userId: string): Promise<UserSearchCon
       youtubeKeywords: [],
       notifyEmail: user.email,
       timezone: DEFAULT_TIMEZONE,
+      productWebsiteUrl: '',
+      productCommerceUrl: '',
+      productDescription: '',
+      productProfile: {
+        status: 'idle',
+        error: null,
+        generatedAt: null,
+        updatedByUser: false,
+        brand: '',
+        productName: '',
+        category: '',
+        coreFeatures: []
+      },
       notifyChannels: ['feishu'],
       feishuWebhook: '',
       feishuStatus: null,
@@ -187,6 +246,9 @@ export async function getUserSearchConfig(userId: string): Promise<UserSearchCon
         maxRedditCommunities: tierLimits.maxRedditCommunities,
         maxRedditKeywords: tierLimits.maxRedditKeywords,
         maxYoutubeKeywords: tierLimits.maxYoutubeKeywords
+      },
+      meta: {
+        redditBetaAllowed
       }
     };
   }
@@ -196,6 +258,9 @@ export async function getUserSearchConfig(userId: string): Promise<UserSearchCon
     maxRedditCommunities: tierLimits.maxRedditCommunities,
     maxRedditKeywords: tierLimits.maxRedditKeywords,
     maxYoutubeKeywords: tierLimits.maxYoutubeKeywords
+  }, {
+    redditBetaAllowed,
+    userEmail: user.email
   });
 }
 
@@ -216,9 +281,18 @@ export async function updateUserSearchConfig(
 
   const existing = user.searchConfig;
   const tierLimits = getTierLimitsByStatus(user.status as Prisma.UserStatus);
+  const redditBetaAllowed = canUseRedditBeta(user.email);
 
   if (tierLimits.maxRedditCommunities === 0 && tierLimits.maxYoutubeKeywords === 0) {
     throw createHttpError(403, '当前账号未开通定时搜索功能，请升级套餐后再试');
+  }
+
+  const requestedReddit =
+    payload.platforms?.includes('reddit') ||
+    (payload.redditCommunities !== undefined && payload.redditCommunities.length > 0) ||
+    (payload.redditKeywords !== undefined && payload.redditKeywords.length > 0);
+  if (requestedReddit && !redditBetaAllowed) {
+    throw createHttpError(403, 'Reddit Beta 功能暂未开放，如需试用请联系 VoiceInsight 团队');
   }
 
   if (
@@ -242,7 +316,10 @@ export async function updateUserSearchConfig(
     throw createHttpError(400, `当前套餐最多支持 ${tierLimits.maxRedditCommunities} 个 Reddit 社区`);
   }
 
-  const platforms = normalizePlatforms(payload.platforms ?? existing?.platforms ?? DEFAULT_PLATFORMS);
+  const platforms = normalizePlatforms(payload.platforms ?? existing?.platforms ?? DEFAULT_PLATFORMS, {
+    userEmail: user.email,
+    enforceRedditWhitelist: true
+  });
   const redditCommunities = normalizeRedditCommunities(
     payload.redditCommunities ?? existing?.reddit_communities ?? [],
     tierLimits.maxRedditCommunities
@@ -259,6 +336,21 @@ export async function updateUserSearchConfig(
   const timezone = payload.timezone ?? existing?.timezone ?? DEFAULT_TIMEZONE;
   const notifyEmail = payload.notifyEmail ?? existing?.notify_email ?? user.email;
   const notifyChannels = normalizeNotifyChannels(payload.notifyChannels ?? existing?.notify_channels ?? ['feishu']);
+  const productWebsiteUrl =
+    payload.productWebsiteUrl !== undefined
+      ? payload.productWebsiteUrl.trim()
+      : existing?.product_website_url ?? '';
+  const productCommerceUrl =
+    payload.productCommerceUrl !== undefined
+      ? payload.productCommerceUrl.trim()
+      : existing?.product_commerce_url ?? '';
+  const productDescription =
+    payload.productDescription !== undefined
+      ? payload.productDescription.trim()
+      : existing?.product_description ?? '';
+  const manualProfile = payload.productProfile
+    ? normalizeProductProfileInput(payload.productProfile)
+    : null;
   const webhookInput =
     payload.feishuWebhook !== undefined
       ? payload.feishuWebhook.trim()
@@ -278,10 +370,16 @@ export async function updateUserSearchConfig(
     payload.redditCommunities !== undefined ||
     payload.redditKeywords !== undefined ||
     payload.youtubeKeywords !== undefined;
+  const productInputsChanged =
+    !existing ||
+    payload.productWebsiteUrl !== undefined ||
+    payload.productCommerceUrl !== undefined ||
+    payload.productDescription !== undefined;
 
   const nextRunAt = computeNextAutoRunAt({
     platforms,
     redditCommunities: effectiveRedditCommunities,
+    redditKeywords: effectiveRedditKeywords,
     youtubeKeywords: effectiveYoutubeKeywords,
     redditLastRunAt: existing?.reddit_last_run_at ?? null,
     youtubeLastRunAt: existing?.youtube_last_run_at ?? null,
@@ -297,6 +395,29 @@ export async function updateUserSearchConfig(
       youtube_keywords: effectiveYoutubeKeywords,
       notify_email: notifyEmail,
       timezone,
+      product_website_url: productWebsiteUrl || null,
+      product_commerce_url: productCommerceUrl || null,
+      product_description: productDescription || null,
+      product_profile_brand: manualProfile?.brand ?? existing?.product_profile_brand ?? null,
+      product_profile_product_name:
+        manualProfile?.productName ?? existing?.product_profile_product_name ?? null,
+      product_profile_category: manualProfile?.category ?? existing?.product_profile_category ?? null,
+      product_profile_core_features:
+        manualProfile?.coreFeatures ?? existing?.product_profile_core_features ?? [],
+      product_profile_competitors: [],
+      product_profile_status:
+        manualProfile
+          ? 'ready'
+          : productInputsChanged
+            ? 'pending'
+            : existing?.product_profile_status ?? 'idle',
+      product_profile_error: manualProfile ? null : productInputsChanged ? null : existing?.product_profile_error ?? null,
+      product_profile_generated_at: manualProfile
+        ? new Date()
+        : productInputsChanged
+          ? null
+          : existing?.product_profile_generated_at ?? null,
+      product_profile_updated_by_user: manualProfile ? true : productInputsChanged ? false : existing?.product_profile_updated_by_user ?? false,
       notify_channels: notifyChannels,
       feishu_webhook: feishuWebhook || null,
       feishu_status: webhookChanged ? null : existing?.feishu_status ?? null,
@@ -312,16 +433,40 @@ export async function updateUserSearchConfig(
       youtube_keywords: effectiveYoutubeKeywords,
       notify_email: notifyEmail,
       timezone,
+      product_website_url: productWebsiteUrl || null,
+      product_commerce_url: productCommerceUrl || null,
+      product_description: productDescription || null,
+      product_profile_brand: manualProfile?.brand ?? null,
+      product_profile_product_name: manualProfile?.productName ?? null,
+      product_profile_category: manualProfile?.category ?? null,
+      product_profile_core_features: manualProfile?.coreFeatures ?? [],
+      product_profile_competitors: [],
+      product_profile_status: manualProfile ? 'ready' : hasAnyProductSource(productWebsiteUrl, productCommerceUrl, productDescription) ? 'pending' : 'idle',
+      product_profile_error: null,
+      product_profile_generated_at: manualProfile ? new Date() : null,
+      product_profile_updated_by_user: Boolean(manualProfile),
       notify_channels: notifyChannels,
       feishu_webhook: feishuWebhook || null,
       next_run_at: nextRunAt
     }
   });
 
-  return mapRecordToDto(record, {
+  const shouldGenerateProfile =
+    !manualProfile &&
+    hasAnyProductSource(productWebsiteUrl, productCommerceUrl, productDescription) &&
+    (productInputsChanged || !hasUsableProductProfile(record));
+
+  const finalRecord = shouldGenerateProfile
+    ? await generateAndPersistProductProfile(record.user_id)
+    : record;
+
+  return mapRecordToDto(finalRecord, {
     maxRedditCommunities: tierLimits.maxRedditCommunities,
     maxRedditKeywords: tierLimits.maxRedditKeywords,
     maxYoutubeKeywords: tierLimits.maxYoutubeKeywords
+  }, {
+    redditBetaAllowed,
+    userEmail: user.email
   });
 }
 
@@ -341,6 +486,19 @@ type DueSearchConfig = Prisma.UserSearchConfigGetPayload<{
     reddit_last_run_at: true;
     youtube_last_run_at: true;
     last_notified_at: true;
+    updated_at: true;
+    product_website_url: true;
+    product_commerce_url: true;
+    product_description: true;
+    product_profile_status: true;
+    product_profile_error: true;
+    product_profile_generated_at: true;
+    product_profile_updated_by_user: true;
+    product_profile_brand: true;
+    product_profile_product_name: true;
+    product_profile_category: true;
+    product_profile_core_features: true;
+    product_profile_competitors: true;
     user: {
       select: {
         email: true;
@@ -350,12 +508,19 @@ type DueSearchConfig = Prisma.UserSearchConfigGetPayload<{
   };
 }>;
 
-export async function listDueUserSearchConfigs(reference: Date): Promise<DueSearchConfig[]> {
+export async function listDueUserSearchConfigs(
+  reference: Date,
+  options: { ignoreNextRunAt?: boolean } = {}
+): Promise<DueSearchConfig[]> {
   return prisma.userSearchConfig.findMany({
     where: {
-      next_run_at: {
-        lte: reference
-      },
+      ...(options.ignoreNextRunAt
+        ? {}
+        : {
+            next_run_at: {
+              lte: reference
+            }
+          }),
       user: {
         status: {
           in: ['trialing', 'active'] as Prisma.UserStatus[]
@@ -377,6 +542,19 @@ export async function listDueUserSearchConfigs(reference: Date): Promise<DueSear
       reddit_last_run_at: true,
       youtube_last_run_at: true,
       last_notified_at: true,
+      updated_at: true,
+      product_website_url: true,
+      product_commerce_url: true,
+      product_description: true,
+      product_profile_status: true,
+      product_profile_error: true,
+      product_profile_generated_at: true,
+      product_profile_updated_by_user: true,
+      product_profile_brand: true,
+      product_profile_product_name: true,
+      product_profile_category: true,
+      product_profile_core_features: true,
+      product_profile_competitors: true,
       user: {
         select: {
           email: true,
@@ -412,7 +590,10 @@ export async function updateExecutionMetadata(params: {
   });
 }
 
-function normalizePlatforms(source: string[]): string[] {
+function normalizePlatforms(
+  source: string[],
+  options: { userEmail?: string | null; enforceRedditWhitelist?: boolean } = {}
+): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
   for (const platform of source) {
@@ -426,7 +607,7 @@ function normalizePlatforms(source: string[]): string[] {
     seen.add(value);
     result.push(value);
   }
-  const filtered = filterEnabledProviderPlatforms(result);
+  const filtered = filterEnabledProviderPlatforms(result, options);
   if (filtered.length === 0) {
     return [...DEFAULT_PLATFORMS];
   }
@@ -480,6 +661,7 @@ function normalizeRedditCommunities(source: string[], limit: number): string[] {
 export function computeNextAutoRunAt(params: {
   platforms: string[];
   redditCommunities: string[];
+  redditKeywords?: string[];
   youtubeKeywords: string[];
   redditLastRunAt?: Date | null;
   youtubeLastRunAt?: Date | null;
@@ -495,11 +677,15 @@ export function computeNextAutoRunAt(params: {
 
   const candidates: Date[] = [];
 
-  if (params.platforms.includes('reddit') && params.redditCommunities.length > 0) {
+  if (
+    params.platforms.includes('reddit') &&
+    params.redditCommunities.length > 0 &&
+    (params.redditKeywords?.length ?? 0) > 0
+  ) {
     const base = params.redditLastRunAt ?? now;
     candidates.push(
       applyJitter(
-        new Date(base.getTime() + AUTO_REDDIT_INTERVAL_MINUTES * 60 * 1000),
+        new Date(base.getTime() + USER_SEARCH_REDDIT_INTERVAL_MS),
         AUTO_SCHEDULE_JITTER_SECONDS
       )
     );
@@ -509,7 +695,7 @@ export function computeNextAutoRunAt(params: {
     const base = params.youtubeLastRunAt ?? now;
     candidates.push(
       applyJitter(
-        new Date(base.getTime() + AUTO_YOUTUBE_INTERVAL_MINUTES * 60 * 1000),
+        new Date(base.getTime() + USER_SEARCH_YOUTUBE_INTERVAL_MS),
         AUTO_SCHEDULE_JITTER_SECONDS
       )
     );
@@ -531,6 +717,18 @@ function mapRecordToDto(
     youtube_keywords: string[];
     notify_email: string;
     timezone: string;
+    product_website_url: string | null;
+    product_commerce_url: string | null;
+    product_description: string | null;
+    product_profile_status: string | null;
+    product_profile_error: string | null;
+    product_profile_generated_at: Date | null;
+    product_profile_updated_by_user: boolean;
+    product_profile_brand: string | null;
+    product_profile_product_name: string | null;
+    product_profile_category: string | null;
+    product_profile_core_features: string[];
+    product_profile_competitors: string[];
     notify_channels: string[];
     feishu_webhook: string | null;
     feishu_status: string | null;
@@ -546,9 +744,16 @@ function mapRecordToDto(
     maxRedditCommunities: number;
     maxRedditKeywords: number;
     maxYoutubeKeywords: number;
+  },
+  options: {
+    redditBetaAllowed: boolean;
+    userEmail?: string | null;
   }
 ): UserSearchConfigRecord {
-  const safePlatforms = filterEnabledProviderPlatforms(record.platforms);
+  const safePlatforms = filterEnabledProviderPlatforms(record.platforms, {
+    userEmail: options.userEmail,
+    enforceRedditWhitelist: true
+  });
 
   const youtubeKeywords = normalizeKeywords(record.youtube_keywords, limits.maxYoutubeKeywords);
   const redditKeywords = normalizeKeywords(record.reddit_keywords, limits.maxRedditKeywords);
@@ -565,6 +770,19 @@ function mapRecordToDto(
     youtubeKeywords,
     notifyEmail: record.notify_email,
     timezone: record.timezone,
+    productWebsiteUrl: record.product_website_url ?? '',
+    productCommerceUrl: record.product_commerce_url ?? '',
+    productDescription: record.product_description ?? '',
+    productProfile: {
+      status: record.product_profile_status ?? 'idle',
+      error: record.product_profile_error,
+      generatedAt: record.product_profile_generated_at,
+      updatedByUser: record.product_profile_updated_by_user,
+      brand: record.product_profile_brand ?? '',
+      productName: record.product_profile_product_name ?? '',
+      category: record.product_profile_category ?? '',
+      coreFeatures: [...record.product_profile_core_features]
+    },
     notifyChannels:
       record.notify_channels && record.notify_channels.length > 0
         ? [...record.notify_channels]
@@ -578,8 +796,53 @@ function mapRecordToDto(
     lastNotifiedAt: record.last_notified_at,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
-    limits
+    limits,
+    meta: {
+      redditBetaAllowed: options.redditBetaAllowed
+    }
   };
+}
+
+function normalizeProductProfileInput(input: NonNullable<SearchConfigPatchInput['productProfile']>) {
+  return {
+    brand: input.brand?.trim() ?? '',
+    productName: input.productName?.trim() ?? '',
+    category: input.category?.trim() ?? '',
+    coreFeatures: dedupeTextArray(input.coreFeatures ?? [])
+  };
+}
+
+function dedupeTextArray(values: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(trimmed);
+  }
+  return result;
+}
+
+function hasAnyProductSource(websiteUrl: string, commerceUrl: string, description: string): boolean {
+  return Boolean(websiteUrl.trim() || commerceUrl.trim() || description.trim());
+}
+
+function hasUsableProductProfile(record: {
+  product_profile_brand?: string | null;
+  product_profile_product_name?: string | null;
+  product_profile_category?: string | null;
+  product_profile_core_features?: string[];
+  product_profile_competitors?: string[];
+}): boolean {
+  return Boolean(
+    record.product_profile_brand ||
+      record.product_profile_product_name ||
+      record.product_profile_category ||
+      (record.product_profile_core_features?.length ?? 0) > 0
+  );
 }
 
 function countDistinctKeywords(values: string[]): number {

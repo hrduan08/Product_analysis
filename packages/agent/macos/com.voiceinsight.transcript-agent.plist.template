@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.voiceinsight.transcript-agent</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{NODE_BIN}}</string>
+    <string>{{AGENT_JS}}</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>AGENT_HOST</key>
+    <string>127.0.0.1</string>
+    <key>AGENT_PORT</key>
+    <string>8080</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>WorkingDirectory</key>
+  <string>{{WORKDIR}}</string>
+  <key>StandardOutPath</key>
+  <string>{{LOG_DIR}}/agent.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{LOG_DIR}}/agent.err.log</string>
+</dict>
+</plist>
+

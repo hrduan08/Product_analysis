@@ -11,6 +11,7 @@ export type SearchParams = {
   publishedAfter?: string;
   publishedBefore?: string;
   maxPages?: number;
+  timeRange?: 'hour' | 'day' | 'week' | 'month' | 'year' | 'all';
 };
 
 export type FeedbackItem = {
@@ -31,6 +32,7 @@ export type FeedbackItem = {
   tags?: string[];
   matchLevel?: string | null;
   labels?: string[];
+  matchedKeywords?: string[];
 };
 
 export type SearchResult = {

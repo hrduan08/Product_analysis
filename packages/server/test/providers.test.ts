@@ -5,6 +5,7 @@ import { RedditTokenManager } from '../src/auth/reddit-token-manager.js';
 
 let YoutubeProvider: typeof import('../src/providers/youtube-provider.js').YoutubeProvider;
 let RedditProvider: typeof import('../src/providers/reddit-provider.js').RedditProvider;
+let RedditPublicJsonProvider: typeof import('../src/providers/reddit-public-json-provider.js').RedditPublicJsonProvider;
 const youtubeQuotaMock = {
   acquireKey: vi.fn().mockResolvedValue({ apiKey: 'test-key' }),
   markKeyAsExhausted: vi.fn(),
@@ -92,6 +93,7 @@ describe('RedditProvider', () => {
     process.env.REDDIT_USERNAME = 'user';
     process.env.REDDIT_PASSWORD = 'pass';
     ({ RedditProvider } = await import('../src/providers/reddit-provider.js'));
+    ({ RedditPublicJsonProvider } = await import('../src/providers/reddit-public-json-provider.js'));
   });
 
   beforeEach(() => {
@@ -163,5 +165,61 @@ describe('RedditProvider', () => {
 
     await expect(provider.search({ query: 'Apple' })).rejects.toThrowError();
     expect(clearSpy).toHaveBeenCalled();
+  });
+
+  it('maps public JSON Reddit posts to FeedbackItem list', async () => {
+    const provider = new RedditPublicJsonProvider();
+    const createdUtc = Math.floor(Date.now() / 1000);
+
+    nock('https://www.reddit.com')
+      .get('/r/apple/search.json')
+      .query((query) =>
+        query.limit === '10' &&
+        query.raw_json === '1' &&
+        query.restrict_sr === 'on' &&
+        query.q === 'Apple' &&
+        query.sort === 'comments' &&
+        query.t === 'week' &&
+        query.type === 'link'
+      )
+      .reply(200, {
+        data: {
+          after: 't3_after',
+          before: null,
+          dist: 1,
+          children: [
+            {
+              data: {
+                name: 't3_json',
+                title: 'Public JSON Post',
+                author: 'json_user',
+                subreddit: 'apple',
+                created_utc: createdUtc,
+                url: 'https://reddit.com/r/apple/comments/json',
+                permalink: '/r/apple/comments/json',
+                score: 7,
+                num_comments: 3,
+                thumbnail: 'self'
+              }
+            }
+          ]
+        }
+      });
+
+    const result = await provider.search({ query: 'Apple', subreddit: 'apple' });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      platform: 'reddit',
+      id: 't3_json',
+      title: 'Public JSON Post',
+      author: 'json_user',
+      score: 7,
+      commentCount: 3,
+      labels: ['apple'],
+      thumbnailUrl: null,
+      permalink: 'https://www.reddit.com/r/apple/comments/json'
+    });
+    expect(result.pageInfo.nextCursor).toBe('t3_after');
   });
 });

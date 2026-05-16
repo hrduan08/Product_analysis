@@ -1,20 +1,23 @@
 import { formatISO } from 'date-fns';
 
-import { cronConfig } from '../config/cron.js';
 import { mailConfig } from '../config/mail.js';
+import { userSearchFetchConfig } from '../config/user-search-fetch.js';
 import {
   getUserFeedbackItemsByIds,
   listUserUnnotifiedFeedback,
   markUserFeedbackItemsNotified,
+  updateUserFeedbackFilterResults,
   type FeedbackEntity,
   upsertFeedbackItems,
   upsertUserFeedbackItems
 } from '../services/feedback-store.js';
 import {
   computeNextAutoRunAt,
-  getSupportedProviderPlatforms,
+  getSupportedProviderPlatformsForUser,
   listDueUserSearchConfigs,
   resolveRedditCommunityName,
+  USER_SEARCH_REDDIT_INTERVAL_MS,
+  USER_SEARCH_YOUTUBE_INTERVAL_MS,
   updateExecutionMetadata,
   updateFeishuChannelStatus
 } from '../services/search-config.js';
@@ -22,12 +25,17 @@ import { buildMailContent } from '../services/mail/composer.js';
 import { sendMail } from '../services/mail/sender.js';
 import { recordNotifyJob } from '../services/notify-jobs.js';
 import { notifyAlert } from '../services/alert/notifier.js';
-import { runKeywordSync } from './keyword-sync.js';
 import { getTierLimitsByStatus } from '../config/search-limits.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { YoutubeRateLimitError } from '../services/youtube/quota-manager.js';
 import { sendFeishuWebhookMessage, type FeishuWebhookPayload } from '../services/feishu.js';
-import { RedditProvider } from '../providers/reddit-provider.js';
+import {
+  buildProductProfileSummary,
+  hasUsableProductProfile,
+  rerankCandidatesAgainstProfile,
+  type ProductProfile
+} from '../services/product-profile.js';
+import { resolveProvider } from '../providers/index.js';
 import type { FeedbackItem, Platform } from '../types/search.js';
 
 export type UserSearchJobResult = {
@@ -48,18 +56,23 @@ const FEISHU_DATE_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
 });
 
 const NUMBER_FORMATTER = new Intl.NumberFormat('zh-CN');
-const MAX_FEISHU_CARD_ITEMS = 5;
-const MAX_PER_PLATFORM_PUSH_ITEMS = 5;
-const REDDIT_FETCH_INTERVAL_MS = 12 * 60 * 60 * 1000;
-const YOUTUBE_FETCH_INTERVAL_MS = 24 * 60 * 60 * 1000;
-const REDDIT_BACKLOG_WINDOW_DAYS = 3;
-const YOUTUBE_BACKLOG_WINDOW_DAYS = 7;
+const MAX_TOTAL_PUSH_ITEMS = 4;
+const OBSERVATION_WINDOW_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_RERANK_CANDIDATES_PER_PLATFORM = 20;
+const RERANK_PASS_SCORE = Number(process.env.PRODUCT_PROFILE_RERANK_THRESHOLD ?? '0.08');
 
-const redditProvider = new RedditProvider();
+type SelectedFeedbackEntity = FeedbackEntity & {
+  matchedKeywords: string[];
+};
 
-export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<UserSearchJobResult> {
-  const configs = await listDueUserSearchConfigs(now);
+export async function runUserSearchConfigJobs(
+  now: Date = new Date(),
+  options: { ignoreNextRunAt?: boolean } = {}
+): Promise<UserSearchJobResult> {
+  const configs = await listDueUserSearchConfigs(now, {
+    ignoreNextRunAt: options.ignoreNextRunAt
+  });
 
   if (configs.length === 0) {
     return { processed: 0, triggered: 0, delivered: 0, skipped: 0, failed: 0 };
@@ -77,12 +90,13 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
     const logLabel = `[user-cron:${userId}]`;
     const tierLimits = getTierLimitsByStatus(config.user.status as Prisma.UserStatus);
 
-    const activePlatforms = getSupportedProviderPlatforms(config.platforms);
+    const activePlatforms = getSupportedProviderPlatformsForUser(config.platforms, config.user.email);
     const redditCommunities = clampToLimit(config.reddit_communities, tierLimits.maxRedditCommunities);
     const redditKeywords = clampToLimit(config.reddit_keywords, tierLimits.maxRedditKeywords);
     const youtubeKeywords = clampToLimit(config.youtube_keywords, tierLimits.maxYoutubeKeywords);
 
-    const hasRedditTarget = activePlatforms.includes('reddit') && redditCommunities.length > 0;
+    const hasRedditTarget =
+      activePlatforms.includes('reddit') && redditCommunities.length > 0 && redditKeywords.length > 0;
     const hasYoutubeTarget = activePlatforms.includes('youtube') && youtubeKeywords.length > 0;
 
     if (!hasRedditTarget && !hasYoutubeTarget) {
@@ -90,6 +104,7 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
       const nextRun = computeNextAutoRunAt({
         platforms: activePlatforms,
         redditCommunities,
+        redditKeywords,
         youtubeKeywords,
         redditLastRunAt: config.reddit_last_run_at ?? null,
         youtubeLastRunAt: config.youtube_last_run_at ?? null,
@@ -127,8 +142,15 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
       const langRegion = getLanguageRegionFromTimezone(config.timezone);
       const selection = await selectCandidates({
         activePlatforms,
+        configUpdatedAt: config.updated_at,
         logLabel,
         now,
+        productProfile: {
+          brand: config.product_profile_brand ?? '',
+          productName: config.product_profile_product_name ?? '',
+          category: config.product_profile_category ?? '',
+          coreFeatures: config.product_profile_core_features ?? []
+        },
         redditCommunities,
         redditKeywords,
         userId,
@@ -251,6 +273,7 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
       const nextRun = computeNextAutoRunAt({
         platforms: activePlatforms,
         redditCommunities,
+        redditKeywords,
         youtubeKeywords,
         redditLastRunAt: selection.redditLastRunAt ?? config.reddit_last_run_at ?? null,
         youtubeLastRunAt: selection.youtubeLastRunAt ?? config.youtube_last_run_at ?? null,
@@ -314,6 +337,8 @@ export async function runUserSearchConfigJobs(now: Date = new Date()): Promise<U
           },
           counts: {
             candidates: totalCandidates,
+            rawCandidates: selection.rawCandidateCount,
+            prefilterCandidates: selection.prefilterCandidateCount,
             selected: selectedItems.length,
             emailAccepted,
             feishuMessagesSent,
@@ -413,7 +438,7 @@ function clampToLimit<T>(values: T[], limit: number): T[] {
 }
 
 function buildFeishuCardPayload(input: {
-  items: FeedbackEntity[];
+  items: SelectedFeedbackEntity[];
   keywords: string[];
   platforms: string[];
   summary: {
@@ -430,13 +455,19 @@ function buildFeishuCardPayload(input: {
       content: '本轮未检测到新的内容。'
     });
   } else {
-    const limitedItems = input.items.slice(0, MAX_FEISHU_CARD_ITEMS);
+    const limitedItems = input.items;
     limitedItems.forEach((item, index) => {
       const metric = formatMetricForFeishu(item) ?? '-';
       const published = item.published_at ?? item.first_seen_at ?? null;
       const publishedText = published ? FEISHU_DATE_FORMATTER.format(published) : '未知';
-      const keyword = item.keyword ? escapeFeishuMarkdown(item.keyword) : '-';
+      const keywordLabel =
+        item.matchedKeywords.length > 0
+          ? item.matchedKeywords.map(escapeFeishuMarkdown).join(', ')
+          : item.keyword
+            ? escapeFeishuMarkdown(item.keyword)
+            : '-';
       const author = item.author ? escapeFeishuMarkdown(item.author) : '-';
+      const targetUrl = item.platform === 'reddit' ? item.permalink || item.url : item.url;
 
       elements.push({
         tag: 'column_set',
@@ -454,7 +485,7 @@ function buildFeishuCardPayload(input: {
           {
             tag: 'column',
             width: 'equal',
-            elements: [{ tag: 'markdown', content: `**关键词：** ${keyword}` }]
+            elements: [{ tag: 'markdown', content: `**关键词：** ${keywordLabel}` }]
           }
         ]
       });
@@ -487,14 +518,14 @@ function buildFeishuCardPayload(input: {
         ]
       });
 
-      if (item.url) {
+      if (targetUrl) {
         elements.push({
           tag: 'action',
           actions: [
             {
               tag: 'button',
               text: { tag: 'plain_text', content: '查看内容' },
-              url: item.url,
+              url: targetUrl,
               type: 'primary',
               value: {}
             }
@@ -589,8 +620,10 @@ function getLanguageRegionFromTimezone(
 }
 
 type CandidateSelection = {
-  selectedItems: FeedbackEntity[];
+  selectedItems: SelectedFeedbackEntity[];
   candidateCount: number;
+  rawCandidateCount: number;
+  prefilterCandidateCount: number;
   totalCreated: number;
   totalUpdated: number;
   userCreated: number;
@@ -605,8 +638,10 @@ type CandidateSelection = {
 
 async function selectCandidates(params: {
   activePlatforms: Platform[];
+  configUpdatedAt: Date;
   logLabel: string;
   now: Date;
+  productProfile: ProductProfile;
   redditCommunities: string[];
   redditKeywords: string[];
   userId: string;
@@ -631,14 +666,15 @@ async function selectCandidates(params: {
   const shouldRunReddit =
     params.activePlatforms.includes('reddit') &&
     params.redditCommunities.length > 0 &&
-    isPlatformDue(params.redditLastRunAt, REDDIT_FETCH_INTERVAL_MS, params.now);
+    params.redditKeywords.length > 0 &&
+    isPlatformDue(params.redditLastRunAt, USER_SEARCH_REDDIT_INTERVAL_MS, params.now, params.configUpdatedAt);
 
   if (shouldRunReddit) {
-    const redditRun = await runRedditCommunityIncremental({
+    const redditRun = await runRedditCommunitySearch({
       userId: params.userId,
       communities: params.redditCommunities,
       keywords: params.redditKeywords,
-      fetchLimit: cronConfig.fetchLimit,
+      fetchLimit: userSearchFetchConfig.redditFetchLimit,
       logLabel: `${params.logLabel}[reddit]`
     });
 
@@ -656,80 +692,94 @@ async function selectCandidates(params: {
   const shouldRunYoutube =
     params.activePlatforms.includes('youtube') &&
     params.youtubeKeywords.length > 0 &&
-    isPlatformDue(params.youtubeLastRunAt, YOUTUBE_FETCH_INTERVAL_MS, params.now);
+    isPlatformDue(params.youtubeLastRunAt, USER_SEARCH_YOUTUBE_INTERVAL_MS, params.now, params.configUpdatedAt);
 
   if (shouldRunYoutube) {
-    const youtubeResult = await runKeywordSync({
-      keywords: params.youtubeKeywords,
-      platforms: ['youtube'],
-      fetchLimit: cronConfig.fetchLimit,
-      logLabel: `${params.logLabel}[youtube]`,
+    const youtubeResult = await runYoutubeKeywordSearch({
       userId: params.userId,
+      keywords: params.youtubeKeywords,
+      fetchLimit: userSearchFetchConfig.youtubeFetchLimit,
+      logLabel: `${params.logLabel}[youtube]`,
       relevanceLanguage: params.langRegion?.relevanceLanguage,
       regionCode: params.langRegion?.regionCode,
-      order: 'date',
-      publishedAfter: params.youtubeLastRunAt
-        ? new Date(params.youtubeLastRunAt.getTime() - 6 * 60 * 60 * 1000).toISOString()
-        : new Date(params.now.getTime() - 2 * DAY_MS).toISOString(),
-      maxPages: 1
+      now: params.now
     });
 
     totalCreated += youtubeResult.created;
     totalUpdated += youtubeResult.updated;
     userCreated += youtubeResult.userCreated;
     userUpdated += youtubeResult.userUpdated;
-    successCount += youtubeResult.stats.filter((item) => item.success).length;
-    failCount += youtubeResult.stats.filter((item) => !item.success).length;
+    successCount += youtubeResult.successCount;
+    failCount += youtubeResult.failCount;
     finishedAt = youtubeResult.finishedAt;
     youtubeLastRunAt = youtubeResult.finishedAt;
-    for (const id of youtubeResult.userProcessedIds ?? []) {
+    for (const id of youtubeResult.userProcessedIds) {
       processedIds.add(id);
     }
   }
 
   const processedRecords = await getUserFeedbackItemsByIds(params.userId, Array.from(processedIds));
 
-  const backlogSince = new Date(params.now.getTime() - Math.max(REDDIT_BACKLOG_WINDOW_DAYS, YOUTUBE_BACKLOG_WINDOW_DAYS) * DAY_MS);
+  const backlogSince = new Date(params.now.getTime() - OBSERVATION_WINDOW_DAYS * DAY_MS);
+  const seenSince =
+    params.configUpdatedAt.getTime() > backlogSince.getTime() ? params.configUpdatedAt : backlogSince;
   const backlogRecords = await listUserUnnotifiedFeedback({
     userId: params.userId,
     platforms: params.activePlatforms,
     since: backlogSince,
+    seenSince,
     limit: 500
   });
 
-  const allCandidateMap = new Map<string, FeedbackEntity>();
+  const allCandidateMap = new Map<string, SelectedFeedbackEntity>();
   const communitySet = new Set(
     params.redditCommunities
       .map((item) => resolveRedditCommunityName(item)?.toLowerCase())
       .filter((item): item is string => Boolean(item))
   );
-  const redditKeywordSet = new Set(params.redditKeywords.map((item) => item.toLowerCase()));
-  const youtubeKeywordSet = new Set(params.youtubeKeywords.map((item) => item.toLowerCase()));
 
   for (const record of [...processedRecords, ...backlogRecords]) {
-    const feedback = record.feedback;
     if (record.last_notified_at) {
       continue;
     }
-    if (!isRelevantCandidate(feedback, {
+    if (!isRelevantCandidate(record, {
       communitySet,
-      redditKeywordSet,
-      youtubeKeywordSet,
       now: params.now
     })) {
       continue;
     }
-    allCandidateMap.set(feedback.id, feedback);
+    const existing = allCandidateMap.get(record.feedback.id);
+    const matchedKeywords = dedupeKeywords(
+      record.matched_keywords.length > 0 ? record.matched_keywords : [record.feedback.keyword]
+    );
+    if (!existing) {
+      allCandidateMap.set(record.feedback.id, {
+        ...record.feedback,
+        matchedKeywords
+      });
+      continue;
+    }
+
+    allCandidateMap.set(record.feedback.id, {
+      ...(preferNewerFeedback(existing, record.feedback)),
+      matchedKeywords: dedupeKeywords([...existing.matchedKeywords, ...matchedKeywords])
+    });
   }
 
   const allCandidates = Array.from(allCandidateMap.values());
-  const youtubeCandidates = allCandidates.filter((item) => item.platform === 'youtube');
-  const redditCandidates = allCandidates.filter((item) => item.platform === 'reddit');
+  const filteredCandidates = await applyProductProfileFiltering({
+    userId: params.userId,
+    logLabel: params.logLabel,
+    productProfile: params.productProfile,
+    targetKeywords: dedupeKeywords([...params.youtubeKeywords, ...params.redditKeywords]),
+    candidates: allCandidates
+  });
+  const youtubeCandidates = filteredCandidates.passed.filter((item) => item.platform === 'youtube');
+  const redditCandidates = filteredCandidates.passed.filter((item) => item.platform === 'reddit');
 
-  const selectedYoutube = sortPlatformCandidates(youtubeCandidates).slice(0, MAX_PER_PLATFORM_PUSH_ITEMS);
-  const selectedReddit = sortPlatformCandidates(redditCandidates).slice(0, MAX_PER_PLATFORM_PUSH_ITEMS);
-
-  const selectedItems = [...selectedYoutube, ...selectedReddit];
+  const selectedYoutube = sortPlatformCandidates(youtubeCandidates);
+  const selectedReddit = sortPlatformCandidates(redditCandidates);
+  const selectedItems = interleavePlatformCandidates(selectedYoutube, selectedReddit, MAX_TOTAL_PUSH_ITEMS);
 
   return {
     selectedItems,
@@ -739,7 +789,9 @@ async function selectCandidates(params: {
     userUpdated,
     startedAt,
     finishedAt,
-    candidateCount: allCandidates.length,
+    candidateCount: filteredCandidates.passed.length,
+    rawCandidateCount: allCandidates.length,
+    prefilterCandidateCount: filteredCandidates.prefiltered.length,
     successCount,
     failCount,
     redditLastRunAt,
@@ -747,25 +799,134 @@ async function selectCandidates(params: {
   };
 }
 
-function sortPlatformCandidates(items: FeedbackEntity[]): FeedbackEntity[] {
-  return [...items].sort((a, b) => {
-    const priorityDiff = getMatchPriority((a.metadata as any)?.matchLevel) - getMatchPriority((b.metadata as any)?.matchLevel);
-    if (priorityDiff !== 0) {
-      return priorityDiff;
-    }
+async function applyProductProfileFiltering(params: {
+  userId: string;
+  logLabel: string;
+  productProfile: ProductProfile;
+  targetKeywords: string[];
+  candidates: SelectedFeedbackEntity[];
+}): Promise<{
+  passed: SelectedFeedbackEntity[];
+  prefiltered: SelectedFeedbackEntity[];
+}> {
+  if (params.candidates.length === 0) {
+    return { passed: [], prefiltered: [] };
+  }
 
-    if (a.platform === 'youtube' || b.platform === 'youtube') {
+  if (!hasUsableProductProfile(params.productProfile)) {
+    await updateUserFeedbackFilterResults(
+      params.userId,
+      params.candidates.map((candidate) => ({
+        feedbackItemId: candidate.id,
+        status: 'passed_no_profile',
+        score: null,
+        reason: 'missing_product_profile'
+      }))
+    );
+    return {
+      passed: params.candidates,
+      prefiltered: params.candidates
+    };
+  }
+
+  const prefiltered = params.candidates.filter((candidate) =>
+    passesProfilePreFilter(candidate, params.productProfile, params.targetKeywords)
+  );
+  const prefilteredIds = new Set(prefiltered.map((candidate) => candidate.id));
+  const rejectedByRule = params.candidates.filter((candidate) => !prefilteredIds.has(candidate.id));
+
+  if (rejectedByRule.length > 0) {
+    await updateUserFeedbackFilterResults(
+      params.userId,
+      rejectedByRule.map((candidate) => ({
+        feedbackItemId: candidate.id,
+        status: 'rejected_pre_filter',
+        score: null,
+        reason: 'no_profile_signals'
+      }))
+    );
+  }
+
+  const limitedCandidates = [
+    ...sortPlatformCandidates(prefiltered.filter((candidate) => candidate.platform === 'youtube')).slice(
+      0,
+      MAX_RERANK_CANDIDATES_PER_PLATFORM
+    ),
+    ...sortPlatformCandidates(prefiltered.filter((candidate) => candidate.platform === 'reddit')).slice(
+      0,
+      MAX_RERANK_CANDIDATES_PER_PLATFORM
+    )
+  ];
+
+  if (limitedCandidates.length === 0) {
+    return { passed: [], prefiltered };
+  }
+
+  try {
+    const rerankResults = await rerankCandidatesAgainstProfile({
+      profile: params.productProfile,
+      targetKeywords: params.targetKeywords,
+      candidates: limitedCandidates.map((candidate) => ({
+        id: candidate.id,
+        text: buildCandidateSemanticText(candidate)
+      }))
+    });
+
+    const scores = new Map(rerankResults.map((item) => [item.id, item.score]));
+    const passed = limitedCandidates.filter((candidate) => (scores.get(candidate.id) ?? 0) >= RERANK_PASS_SCORE);
+    const failed = limitedCandidates.filter((candidate) => !passed.some((item) => item.id === candidate.id));
+
+    await updateUserFeedbackFilterResults(params.userId, [
+      ...passed.map((candidate) => ({
+        feedbackItemId: candidate.id,
+        status: 'passed_reranker',
+        score: scores.get(candidate.id) ?? null,
+        reason: 'reranker_pass'
+      })),
+      ...failed.map((candidate) => ({
+        feedbackItemId: candidate.id,
+        status: 'rejected_reranker',
+        score: scores.get(candidate.id) ?? null,
+        reason: 'reranker_below_threshold'
+      }))
+    ]);
+
+    console.log(
+      `${params.logLabel}[profile] 原始 ${params.candidates.length} 条，预过滤 ${prefiltered.length} 条，送入 reranker ${limitedCandidates.length} 条，通过 ${passed.length} 条`
+    );
+
+    return { passed, prefiltered };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`${params.logLabel}[profile] reranker 过滤失败，回退到预过滤结果：${message}`);
+    await updateUserFeedbackFilterResults(
+      params.userId,
+      limitedCandidates.map((candidate) => ({
+        feedbackItemId: candidate.id,
+        status: 'passed_reranker_fallback',
+        score: null,
+        reason: 'reranker_error'
+      }))
+    );
+    return { passed: limitedCandidates, prefiltered };
+  }
+}
+
+function sortPlatformCandidates(items: SelectedFeedbackEntity[]): SelectedFeedbackEntity[] {
+  return [...items].sort((a, b) => {
+    if (a.platform === 'youtube' && b.platform === 'youtube') {
       const viewDiff = (b.view_count ?? 0) - (a.view_count ?? 0);
       if (viewDiff !== 0) return viewDiff;
+      const commentDiff = (b.comment_count ?? 0) - (a.comment_count ?? 0);
+      if (commentDiff !== 0) return commentDiff;
     }
 
-    if (a.platform === 'reddit' || b.platform === 'reddit') {
+    if (a.platform === 'reddit' && b.platform === 'reddit') {
+      const commentDiff = (b.comment_count ?? 0) - (a.comment_count ?? 0);
+      if (commentDiff !== 0) return commentDiff;
       const scoreDiff = (b.score ?? 0) - (a.score ?? 0);
       if (scoreDiff !== 0) return scoreDiff;
     }
-
-    const commentDiff = (b.comment_count ?? 0) - (a.comment_count ?? 0);
-    if (commentDiff !== 0) return commentDiff;
 
     const dateA = a.published_at ? new Date(a.published_at).getTime() : 0;
     const dateB = b.published_at ? new Date(b.published_at).getTime() : 0;
@@ -774,27 +935,23 @@ function sortPlatformCandidates(items: FeedbackEntity[]): FeedbackEntity[] {
 }
 
 function isRelevantCandidate(
-  feedback: FeedbackEntity,
+  record: Awaited<ReturnType<typeof getUserFeedbackItemsByIds>>[number],
   options: {
     communitySet: Set<string>;
-    redditKeywordSet: Set<string>;
-    youtubeKeywordSet: Set<string>;
     now: Date;
   }
 ): boolean {
+  const feedback = record.feedback;
   const ageMs = options.now.getTime() - (feedback.published_at?.getTime() ?? feedback.first_seen_at?.getTime() ?? 0);
   if (feedback.platform === 'youtube') {
-    if (ageMs > YOUTUBE_BACKLOG_WINDOW_DAYS * DAY_MS) {
+    if (ageMs > OBSERVATION_WINDOW_DAYS * DAY_MS) {
       return false;
     }
-    if (options.youtubeKeywordSet.size === 0) {
-      return false;
-    }
-    return options.youtubeKeywordSet.has((feedback.keyword ?? '').toLowerCase());
+    return record.matched_keywords.length > 0 || Boolean(feedback.keyword);
   }
 
   if (feedback.platform === 'reddit') {
-    if (ageMs > REDDIT_BACKLOG_WINDOW_DAYS * DAY_MS) {
+    if (ageMs > OBSERVATION_WINDOW_DAYS * DAY_MS) {
       return false;
     }
     const metadata = (feedback.metadata ?? {}) as Record<string, unknown>;
@@ -806,25 +963,71 @@ function isRelevantCandidate(
     if (!belongsToCommunity) {
       return false;
     }
-
-    if (options.redditKeywordSet.size === 0) {
-      return true;
-    }
-
-    return options.redditKeywordSet.has((feedback.keyword ?? '').toLowerCase());
+    return record.matched_keywords.length > 0 || Boolean(feedback.keyword);
   }
 
   return false;
 }
 
-function isPlatformDue(lastRunAt: Date | null, intervalMs: number, now: Date): boolean {
-  if (!lastRunAt) {
+function passesProfilePreFilter(
+  item: SelectedFeedbackEntity,
+  profile: ProductProfile,
+  targetKeywords: string[]
+): boolean {
+  const text = buildCandidateSemanticText(item);
+  if (!text) {
+    return false;
+  }
+
+  const normalizedText = normalizeSearchText(text);
+  const tokenSet = new Set(tokenizeNormalizedText(normalizedText));
+  const phrases = dedupeKeywords([
+    profile.brand,
+    profile.productName,
+    ...profile.coreFeatures,
+    ...targetKeywords
+  ]);
+
+  if (phrases.length === 0) {
     return true;
   }
-  return now.getTime() - lastRunAt.getTime() >= intervalMs;
+
+  for (const phrase of phrases) {
+    const normalizedPhrase = normalizeSearchText(phrase);
+    if (!normalizedPhrase) continue;
+    if (normalizedText.includes(normalizedPhrase)) {
+      return true;
+    }
+
+    const tokens = tokenizeNormalizedText(normalizedPhrase);
+    if (tokens.length >= 2 && tokens.every((token) => tokenSet.has(token))) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
-type CommunitySyncResult = {
+function buildCandidateSemanticText(item: SelectedFeedbackEntity): string {
+  const metadata = ((item.metadata ?? {}) as Record<string, unknown>) ?? {};
+  const description = typeof metadata.description === 'string' ? metadata.description : '';
+  const tags = Array.isArray(metadata.tags) ? metadata.tags.map((value) => String(value)) : [];
+  const labels = Array.isArray(metadata.labels) ? metadata.labels.map((value) => String(value)) : [];
+
+  return [
+    item.title,
+    description,
+    tags.join(' '),
+    labels.join(' '),
+    item.author ?? '',
+    item.platform === 'reddit' ? item.permalink ?? '' : ''
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+
+type PlatformSyncResult = {
   created: number;
   updated: number;
   userCreated: number;
@@ -835,13 +1038,13 @@ type CommunitySyncResult = {
   finishedAt: Date;
 };
 
-async function runRedditCommunityIncremental(params: {
+async function runRedditCommunitySearch(params: {
   userId: string;
   communities: string[];
   keywords: string[];
   fetchLimit: number;
   logLabel: string;
-}): Promise<CommunitySyncResult> {
+}): Promise<PlatformSyncResult> {
   let created = 0;
   let updated = 0;
   let userCreated = 0;
@@ -850,6 +1053,7 @@ async function runRedditCommunityIncremental(params: {
   let successCount = 0;
   let failCount = 0;
   let finishedAt = new Date();
+  const query = buildCombinedKeywordQuery(params.keywords);
 
   for (const source of params.communities) {
     const subreddit = resolveRedditCommunityName(source);
@@ -860,19 +1064,21 @@ async function runRedditCommunityIncremental(params: {
     }
 
     try {
+      const redditProvider = resolveProvider('reddit');
       const result = await redditProvider.search({
-        query: `subreddit:${subreddit}`,
+        query,
         subreddit,
-        limit: params.fetchLimit
+        limit: params.fetchLimit,
+        timeRange: 'week'
       });
 
-      const scopedItems = matchRedditItemsByKeywords(result.items, params.keywords, subreddit);
-      if (scopedItems.length === 0) {
+      const attributedItems = attributeMatchedKeywordsForDisplay(result.items, params.keywords);
+      if (attributedItems.length === 0) {
         successCount += 1;
         continue;
       }
 
-      const groups = groupByKeyword(scopedItems);
+      const groups = groupByKeyword(attributedItems);
       for (const [keyword, items] of groups.entries()) {
         const persist = await upsertFeedbackItems('reddit', keyword, items);
         created += persist.created;
@@ -880,9 +1086,10 @@ async function runRedditCommunityIncremental(params: {
 
         const userResult = await upsertUserFeedbackItems(
           params.userId,
-          persist.processedItems.map((item) => ({
+          persist.processedItems.map((item, index) => ({
             feedbackItemId: item.id,
-            seenAt: item.seenAt
+            seenAt: item.seenAt,
+            matchedKeywords: items[index]?.matchedKeywords ?? []
           }))
         );
 
@@ -893,12 +1100,90 @@ async function runRedditCommunityIncremental(params: {
 
       successCount += 1;
       finishedAt = new Date();
-      console.log(`${params.logLabel} 社区 r/${subreddit} 抓取 ${result.items.length} 条，匹配 ${scopedItems.length} 条`);
+      console.log(`${params.logLabel} 社区 r/${subreddit} 抓取 ${result.items.length} 条，入池 ${attributedItems.length} 条`);
     } catch (error) {
       failCount += 1;
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`${params.logLabel} 社区 r/${subreddit} 执行失败：${message}`);
     }
+  }
+
+  return {
+    created,
+    updated,
+    userCreated,
+    userUpdated,
+    userProcessedIds,
+    successCount,
+    failCount,
+    finishedAt
+  };
+}
+
+async function runYoutubeKeywordSearch(params: {
+  userId: string;
+  keywords: string[];
+  fetchLimit: number;
+  logLabel: string;
+  relevanceLanguage?: string;
+  regionCode?: string;
+  now: Date;
+}): Promise<PlatformSyncResult> {
+  let created = 0;
+  let updated = 0;
+  let userCreated = 0;
+  let userUpdated = 0;
+  let successCount = 0;
+  let failCount = 0;
+  const userProcessedIds: string[] = [];
+  let finishedAt = new Date();
+
+  const youtubeProvider = resolveProvider('youtube');
+  const query = buildCombinedKeywordQuery(params.keywords);
+
+  try {
+    const result = await youtubeProvider.search({
+      query,
+      limit: params.fetchLimit,
+      relevanceLanguage: params.relevanceLanguage,
+      regionCode: params.regionCode,
+      order: 'viewCount',
+      publishedAfter: new Date(params.now.getTime() - OBSERVATION_WINDOW_DAYS * DAY_MS).toISOString(),
+      maxPages: 1
+    });
+
+    const attributedItems = attributeMatchedKeywordsForDisplay(result.items, params.keywords);
+    const groups = groupByKeyword(attributedItems);
+
+    for (const [keyword, items] of groups.entries()) {
+      const persist = await upsertFeedbackItems('youtube', keyword, items);
+      created += persist.created;
+      updated += persist.updated;
+
+      const userResult = await upsertUserFeedbackItems(
+        params.userId,
+        persist.processedItems.map((item, index) => ({
+          feedbackItemId: item.id,
+          seenAt: item.seenAt,
+          matchedKeywords: items[index]?.matchedKeywords ?? []
+        }))
+      );
+
+      userCreated += userResult.created;
+      userUpdated += userResult.updated;
+      userProcessedIds.push(...userResult.processedIds);
+    }
+
+    successCount += 1;
+    finishedAt = new Date();
+    console.log(`${params.logLabel} 抓取 ${result.items.length} 条，入池 ${attributedItems.length} 条`);
+  } catch (error) {
+    failCount += 1;
+    if (error instanceof YoutubeRateLimitError) {
+      throw error;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`${params.logLabel} 执行失败：${message}`);
   }
 
   return {
@@ -924,93 +1209,154 @@ function groupByKeyword(items: FeedbackItem[]): Map<string, FeedbackItem[]> {
   return grouped;
 }
 
-function matchRedditItemsByKeywords(items: FeedbackItem[], keywords: string[], subreddit: string): FeedbackItem[] {
+function attributeMatchedKeywordsForDisplay(items: FeedbackItem[], keywords: string[]): FeedbackItem[] {
   if (keywords.length === 0) {
-    return items.map((item) => ({
-      ...item,
-      keyword: `r/${subreddit}`,
-      matchLevel: 'A'
-    }));
+    return items;
   }
 
-  const scoped: FeedbackItem[] = [];
-  for (const item of items) {
-    const best = pickBestKeyword(item, keywords);
-    if (!best) {
-      continue;
-    }
-    scoped.push({
+  return items.map((item) => {
+    const matchedKeywords = resolveMatchedKeywords(item, keywords);
+    const primaryKeyword = matchedKeywords[0] ?? keywords[0] ?? item.keyword;
+    return {
       ...item,
-      keyword: best.keyword,
-      matchLevel: best.matchLevel
-    });
-  }
-  return scoped;
+      keyword: primaryKeyword,
+      matchedKeywords
+    };
+  });
 }
 
-function pickBestKeyword(item: FeedbackItem, keywords: string[]): { keyword: string; matchLevel: string } | null {
-  let best: { keyword: string; matchLevel: string } | null = null;
-  let bestPriority = Number.MAX_SAFE_INTEGER;
+function resolveMatchedKeywords(item: FeedbackItem, keywords: string[]): string[] {
+  const textTargets = [item.title ?? '', item.description ?? '', ...(item.tags ?? [])]
+    .map(normalizeSearchText)
+    .filter(Boolean);
 
+  const matched = keywords.filter((keyword) => {
+    const normalizedKeyword = normalizeSearchText(keyword);
+    if (!normalizedKeyword) {
+      return false;
+    }
+    return textTargets.some((text) => text.includes(normalizedKeyword));
+  });
+
+  return matched.length > 0 ? dedupeKeywords(matched) : [];
+}
+
+function normalizeSearchText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[“”"']/g, '')
+    .replace(/([a-z])(\d)/gi, '$1 $2')
+    .replace(/(\d)([a-z])/gi, '$1 $2')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function tokenizeNormalizedText(value: string): string[] {
+  return value.split(' ').filter(Boolean);
+}
+
+function containsNormalizedPhrase(text: string, phrase: string): boolean {
+  return Boolean(text && phrase && text.includes(phrase));
+}
+
+function containsAllTokens(text: string, tokens: string[]): boolean {
+  if (!text || tokens.length === 0) {
+    return false;
+  }
+  return tokens.every((token) => containsToken(text, token));
+}
+
+function containsAnyToken(text: string, tokens: string[]): boolean {
+  if (!text || tokens.length === 0) {
+    return false;
+  }
+  return tokens.some((token) => containsToken(text, token));
+}
+
+function containsToken(text: string, token: string): boolean {
+  if (!text || !token) {
+    return false;
+  }
+  return tokenizeNormalizedText(text).includes(token);
+}
+
+function buildCombinedKeywordQuery(keywords: string[]): string {
+  return keywords
+    .map((keyword) => keyword.trim())
+    .filter(Boolean)
+    .map((keyword) => `"${keyword.replace(/"/g, '\\"')}"`)
+    .join(' OR ');
+}
+
+function dedupeKeywords(keywords: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
   for (const keyword of keywords) {
-    const matchLevel = computeMatchLevel(item, keyword);
-    const priority = getMatchPriority(matchLevel);
-    if (priority > 5) {
+    const trimmed = keyword.trim();
+    if (!trimmed) {
       continue;
     }
-    if (priority < bestPriority) {
-      bestPriority = priority;
-      best = { keyword, matchLevel };
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) {
+      continue;
     }
+    seen.add(key);
+    result.push(trimmed);
   }
-
-  return best;
+  return result;
 }
 
-function computeMatchLevel(item: FeedbackItem, keyword: string): string {
-  const phrase = keyword.trim().toLowerCase();
-  const words = phrase.split(/\s+/).filter(Boolean);
+function interleavePlatformCandidates(
+  youtubeItems: SelectedFeedbackEntity[],
+  redditItems: SelectedFeedbackEntity[],
+  limit: number
+): SelectedFeedbackEntity[] {
+  const merged: SelectedFeedbackEntity[] = [];
+  let index = 0;
 
-  const title = item.title ?? '';
-  const description = item.description ?? '';
-  const tagsText = Array.isArray(item.tags) ? item.tags.join(' ') : '';
+  while (merged.length < limit) {
+    const nextYoutube = youtubeItems[index];
+    const nextReddit = redditItems[index];
+    let pushed = false;
 
-  const containsPhrase = (text?: string | null) =>
-    Boolean(text && phrase && text.toLowerCase().includes(phrase));
+    if (nextYoutube) {
+      merged.push(nextYoutube);
+      pushed = true;
+      if (merged.length >= limit) {
+        break;
+      }
+    }
 
-  const containsAllWords = (text?: string | null) => {
-    if (!text || words.length === 0) return false;
-    const lower = text.toLowerCase();
-    return words.every((word) => lower.includes(word));
-  };
+    if (nextReddit) {
+      merged.push(nextReddit);
+      pushed = true;
+      if (merged.length >= limit) {
+        break;
+      }
+    }
 
-  const containsAnyWord = (text?: string | null) => {
-    if (!text || words.length === 0) return false;
-    const lower = text.toLowerCase();
-    return words.some((word) => lower.includes(word));
-  };
+    if (!pushed) {
+      break;
+    }
+    index += 1;
+  }
 
-  if (containsPhrase(title)) return 'A';
-  if (containsAllWords(title)) return 'B';
-  if (containsPhrase(tagsText) || containsAllWords(tagsText)) return 'C';
-  if (containsPhrase(description) || containsAllWords(description)) return 'D';
-  if (containsAnyWord(title) || containsAnyWord(tagsText) || containsAnyWord(description)) return 'E';
-  return 'F';
+  return merged;
 }
 
-function getMatchPriority(matchLevel?: string | null): number {
-  switch ((matchLevel ?? '').toUpperCase()) {
-    case 'A':
-      return 1;
-    case 'B':
-      return 2;
-    case 'C':
-      return 3;
-    case 'D':
-      return 4;
-    case 'E':
-      return 5;
-    default:
-      return 99;
+function preferNewerFeedback(current: FeedbackEntity, incoming: FeedbackEntity): FeedbackEntity {
+  const currentSeen = current.last_seen_at?.getTime() ?? current.first_seen_at?.getTime() ?? 0;
+  const incomingSeen = incoming.last_seen_at?.getTime() ?? incoming.first_seen_at?.getTime() ?? 0;
+  return incomingSeen >= currentSeen ? incoming : current;
+}
+
+function isPlatformDue(lastRunAt: Date | null, intervalMs: number, now: Date, configUpdatedAt?: Date | null): boolean {
+  if (!lastRunAt) {
+    return true;
   }
+  if (configUpdatedAt && configUpdatedAt.getTime() > lastRunAt.getTime()) {
+    return true;
+  }
+  return now.getTime() - lastRunAt.getTime() >= intervalMs;
 }

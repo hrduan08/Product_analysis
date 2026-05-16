@@ -1,23 +1,25 @@
-import type { SearchParams, SearchProvider, SearchResult } from '../types/search.js';
-import { RedditTokenManager } from '../auth/reddit-token-manager.js';
+import type { FeedbackItem, SearchParams, SearchProvider, SearchResult } from '../types/search.js';
 
-const API_BASE = 'https://oauth.reddit.com';
+const API_BASE = 'https://www.reddit.com';
 const SUBREDDIT_QUERY_PREFIX = /^subreddit:([A-Za-z0-9_]+)$/i;
+const SUBREDDIT_NAME = /^[A-Za-z0-9_]{2,32}$/;
+const DEFAULT_USER_AGENT =
+  'VoiceInsight/0.1 public-json beta (contact: support@voiceinsight.cloud)';
 
-export class RedditProvider implements SearchProvider {
-  private readonly tokenManager = new RedditTokenManager();
-
+export class RedditPublicJsonProvider implements SearchProvider {
   async search({ query, cursor, limit = 10, subreddit, timeRange }: SearchParams): Promise<SearchResult> {
-    const { token, userAgent } = await this.tokenManager.getToken();
-    const normalizedSubreddit = normalizeSubredditInput(subreddit ?? query);
-
-    let endpoint = '/search';
+    const normalizedSubreddit = subreddit
+      ? normalizeSubredditInput(subreddit, { allowPlainName: true })
+      : normalizeSubredditInput(query, { allowPlainName: false });
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 10, 100));
     const params = new URLSearchParams({
-      limit: String(Math.max(1, Math.min(Number(limit) || 10, 100)))
+      raw_json: '1',
+      limit: String(safeLimit)
     });
 
+    let endpoint = '/search.json';
     if (normalizedSubreddit) {
-      endpoint = `/r/${normalizedSubreddit}/search`;
+      endpoint = `/r/${encodeURIComponent(normalizedSubreddit)}/search.json`;
       params.set('restrict_sr', 'on');
     }
     params.set('q', query);
@@ -31,54 +33,45 @@ export class RedditProvider implements SearchProvider {
 
     const response = await fetch(`${API_BASE}${endpoint}?${params.toString()}`, {
       headers: {
-        Authorization: `Bearer ${token}`,
-        'User-Agent': userAgent
+        Accept: 'application/json',
+        'User-Agent': process.env.REDDIT_PUBLIC_JSON_USER_AGENT || process.env.REDDIT_USER_AGENT || DEFAULT_USER_AGENT
       }
     });
 
     if (!response.ok) {
-      let message = 'Reddit 搜索请求失败';
-      let errorPayload: unknown = null;
+      let message = 'Reddit public JSON 请求失败';
+      let payload: unknown = null;
       try {
-        errorPayload = await response.json();
-        if (typeof errorPayload === 'object' && errorPayload) {
-          const payload = errorPayload as any;
-          message = payload?.message ?? message;
-          if (payload?.error) {
-            message = `${payload.error}: ${payload.error_description ?? message}`;
-          }
+        payload = await response.json();
+        if (payload && typeof payload === 'object' && 'message' in payload) {
+          message = String((payload as { message?: unknown }).message || message);
         }
       } catch {
-        // ignore JSON parse error
+        // ignore parse failure
       }
-      console.warn('[reddit] request failed', {
+      console.warn('[reddit-public-json] request failed', {
         status: response.status,
         statusText: response.statusText,
-        body: errorPayload
+        body: payload
       });
       const error = new Error(message) as Error & { status?: number };
       error.status = response.status;
-      if (response.status === 401) {
-        this.tokenManager.clear();
-      }
       throw error;
     }
 
     const data = (await response.json()) as any;
     const children: any[] = data?.data?.children ?? [];
     const now = new Date().toISOString();
-
     const sourceKeyword = normalizedSubreddit ? `r/${normalizedSubreddit}` : query;
-    const items = children
+
+    const items: FeedbackItem[] = children
       .map((child) => child?.data)
       .filter(Boolean)
       .filter((post: any) => post?.name && post?.title)
       .map((post: any) => {
-        const permalink: string | null = post.permalink
-          ? `https://www.reddit.com${post.permalink}`
-          : null;
-        const thumbnail = sanitizeThumbnail(post.thumbnail);
+        const permalink = post.permalink ? `https://www.reddit.com${post.permalink}` : null;
         const createdUtc = Number(post.created_utc) * 1000;
+        const thumbnail = sanitizeThumbnail(post.thumbnail);
 
         return {
           platform: 'reddit' as const,
@@ -86,7 +79,7 @@ export class RedditProvider implements SearchProvider {
           id: String(post.name),
           title: String(post.title ?? ''),
           author: String(post.author ?? 'unknown'),
-          publishedAt: isFinite(createdUtc) ? new Date(createdUtc).toISOString() : now,
+          publishedAt: Number.isFinite(createdUtc) ? new Date(createdUtc).toISOString() : now,
           fetchedAt: now,
           url: typeof post.url === 'string' && post.url ? post.url : permalink ?? '',
           permalink,
@@ -113,50 +106,41 @@ export class RedditProvider implements SearchProvider {
         prevCursor: pageInfo.before ?? null,
         raw: {
           after: pageInfo.after ?? null,
-          before: pageInfo.before ?? null
+          before: pageInfo.before ?? null,
+          provider: 'public_json'
         }
       }
     };
   }
 }
 
-function normalizeSubredditInput(value?: string): string | null {
-  if (!value) {
-    return null;
-  }
+function normalizeSubredditInput(value?: string, options: { allowPlainName?: boolean } = {}): string | null {
+  if (!value) return null;
   const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
+  if (!trimmed) return null;
 
   const prefixMatched = trimmed.match(SUBREDDIT_QUERY_PREFIX);
-  if (prefixMatched?.[1]) {
-    return prefixMatched[1];
-  }
+  if (prefixMatched?.[1]) return prefixMatched[1];
 
   try {
     const url = new URL(trimmed);
     const parts = url.pathname.split('/').filter(Boolean);
     const idx = parts.findIndex((item) => item.toLowerCase() === 'r');
-    if (idx >= 0 && parts[idx + 1]) {
-      return parts[idx + 1];
-    }
+    if (idx >= 0 && parts[idx + 1]) return parts[idx + 1];
   } catch {
-    // ignore URL parse failure, continue raw pattern parse
+    // continue raw pattern parse
   }
 
   const rMatched = trimmed.match(/^r\/([A-Za-z0-9_]+)$/i);
-  if (rMatched?.[1]) {
-    return rMatched[1];
-  }
+  if (rMatched?.[1]) return rMatched[1];
+
+  if (options.allowPlainName && SUBREDDIT_NAME.test(trimmed)) return trimmed;
 
   return null;
 }
 
 function sanitizeThumbnail(value: unknown): string | null {
-  if (typeof value !== 'string') {
-    return null;
-  }
+  if (typeof value !== 'string') return null;
   if (!value || value === 'self' || value === 'default' || value === 'nsfw' || value === 'image') {
     return null;
   }

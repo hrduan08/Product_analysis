@@ -228,12 +228,12 @@
 
 | TC-ID | 场景 | 前置 | 步骤 | 期望 |
 |-------|------|------|------|------|
-| CRON-001 | 关键词同步成功 | `CRON_ENABLED=true` | 启动服务等待 Cron 或手动执行 `runKeywordSync` | 控制台输出开始/完成；`feedback_items` 新增；`notify_jobs` status=success；邮件 stub 输出 |
+| CRON-001 | 用户搜索关键词同步成功 | `USER_SEARCH_CRON_ENABLED=true` | 启动服务等待用户搜索任务触发，或手动执行 `runKeywordSync` | 控制台输出开始/完成；`feedback_items` 新增；`notify_jobs` status=success；邮件 stub 输出 |
 | CRON-002 | 关键词同步失败 | 移除 API Key | 执行 Cron | `notify_jobs` status=failed；Slack critical |
 | CRON-003 | 邮件发送条件 | `MAIL_SEND_EMPTY=false`、无新增数据 | Cron 完成 | 控制台打印“跳过邮件发送”；`total_sent=0` |
 | CRON-004 | 订阅提醒成功 | 构造试用即将到期用户 | 运行 `runBillingReminderJob` | 控制台“试用提醒 X 个、续费提醒 X 个”；邮件发送成功 |
 | CRON-005 | 订阅提醒失败 | 模拟邮件异常 | 执行 | Slack warning；无邮件发送 |
-| CRON-006 | Cron 禁用 | `CRON_ENABLED=false` | 启动服务 | 控制台提示“已禁用”，不触发任务 |
+| CRON-006 | 用户搜索任务禁用 | `USER_SEARCH_CRON_ENABLED=false` | 启动服务 | 控制台提示“已禁用”，不触发用户搜索任务 |
 
 ---
 
@@ -270,7 +270,7 @@
 
 | TC-ID | 场景 | 前置 | 步骤 | 期望 |
 |-------|------|------|------|------|
-| PERF-001 | 搜索大流量 | `CRON_FETCH_LIMIT=50`，数据库已有大量反馈 | 搜索高频词 | 页面响应时间可接受（<3s），正确分页 |
+| PERF-001 | 搜索大流量 | `USER_SEARCH_FETCH_LIMIT=50`，数据库已有大量反馈 | 搜索高频词 | 页面响应时间可接受（<3s），正确分页 |
 | PERF-002 | 订单并发 | 模拟脚本并发 20 次发起支付 | 生成 20 条 `pending` 订单，无连接池超时 |
 | PERF-003 | Cron + 用户操作并发 | Cron 执行时手动搜索/支付 | 两者互不影响，无严重性能下降 |
 | PERF-004 | 长时间运行 | 服务连续运行 24h | Cron、搜索、告警均正常；无内存泄漏迹象（需监控工具辅助） |

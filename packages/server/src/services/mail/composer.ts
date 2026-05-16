@@ -112,7 +112,7 @@ function renderCardLayout(items: FeedbackEntity[]): string {
 
     for (const [keyword, keywordItems] of keywords.entries()) {
       const cards = keywordItems
-        .map((item) => renderCard(platform, primaryLabel, keyword, item))
+        .map((item) => renderCard(platform, primaryLabel, item))
         .join("\n");
 
       keywordSections.push(`
@@ -139,15 +139,16 @@ function renderCardLayout(items: FeedbackEntity[]): string {
 function renderCard(
   platform: string,
   primaryLabel: string,
-  keyword: string,
   item: FeedbackEntity
 ): string {
+  const matchedKeywords = extractMatchedKeywords(item);
+  const targetUrl = platform === "reddit" ? item.permalink || item.url : item.url;
   return `
     <div style="border:1px solid #e5e7eb;border-radius:10px;padding:12px;background:#ffffff;box-shadow:0 1px 2px rgba(15,23,42,0.08);">
-      <a href="${item.url}" style="font-size:15px;font-weight:600;color:#2563eb;text-decoration:none;display:block;margin-bottom:8px;">
+      <a href="${targetUrl}" style="font-size:15px;font-weight:600;color:#2563eb;text-decoration:none;display:block;margin-bottom:8px;">
         ${escapeHtml(item.title)}
       </a>
-      <div style="font-size:13px;color:#6b7280;margin-bottom:12px;">平台：${PLATFORM_LABEL[platform] ?? platform} · 关键词：${escapeHtml(keyword)}</div>
+      <div style="font-size:13px;color:#6b7280;margin-bottom:12px;">平台：${PLATFORM_LABEL[platform] ?? platform} · 关键词：${escapeHtml(matchedKeywords.join(", "))}</div>
       <div style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:#374151;">
         <div>作者：${escapeHtml(item.author ?? "-")}</div>
         <div>${primaryLabel}：${formatMetric(platform, item)}</div>
@@ -177,13 +178,16 @@ function renderText(items: FeedbackEntity[], summary: MailSummary): string {
       for (const [keyword, keywordItems] of keywords.entries()) {
         lines.push(`  - 关键词：${keyword}`);
         keywordItems.forEach((item, idx) => {
+          const matchedKeywords = extractMatchedKeywords(item);
           const primaryLabel = platform === "youtube" ? "播放量" : "点赞数";
           lines.push(`    ${idx + 1}. ${item.title}`);
           lines.push(`       作者：${item.author ?? "-"}`);
+          lines.push(`       关键词：${matchedKeywords.join(", ")}`);
           lines.push(`       ${primaryLabel}：${formatMetric(platform, item)}`);
           lines.push(`       评论数：${formatNumber(item.comment_count)}`);
           lines.push(`       发布时间：${item.published_at ? DATE_FORMATTER.format(item.published_at) : "-"}`);
-          lines.push(`       链接：${item.url}`);
+          const targetUrl = platform === "reddit" ? item.permalink || item.url : item.url;
+          lines.push(`       链接：${targetUrl}`);
         });
       }
     }
@@ -248,4 +252,12 @@ function formatNumber(value: number | null | undefined): string {
     return "-";
   }
   return NUMBER_FORMATTER.format(value);
+}
+
+function extractMatchedKeywords(item: FeedbackEntity): string[] {
+  const maybeMatched = (item as FeedbackEntity & { matchedKeywords?: string[] }).matchedKeywords;
+  if (Array.isArray(maybeMatched) && maybeMatched.length > 0) {
+    return maybeMatched;
+  }
+  return [item.keyword];
 }

@@ -1,0 +1,32 @@
+flowchart LR
+  subgraph Client[Client Layer]
+    CS[contentScript.js\nNavigation Bridge]
+    UI[popup.html + popup.js\nSide Panel UI + Orchestration]
+    SH[popup.shared.js\nPure Helpers]
+    BG[background.js\nSide Panel Bootstrap]
+  end
+
+  subgraph Youtube[YouTube Runtime]
+    YT[YouTube Page\nSPA + Player]
+    MW[Main World APIs\nplayerResponse/captionTracks]
+    TT[timedtext Endpoints]
+  end
+
+  subgraph Service[Service Layer]
+    API[VoiceInsight API\n/api/youtube/transcript]
+    AG[Local Agent\npython bridge + yt-dlp]
+  end
+
+  YT --> CS
+  CS --> UI
+  UI --> SH
+  UI --> MW
+  UI --> TT
+  UI --> API
+  API --> AG
+  BG -. sidePanel open behavior .-> UI
+
+  classDef core fill:#e8f2ff,stroke:#3b82f6,stroke-width:1px;
+  classDef edge fill:#f5f5f5,stroke:#666,stroke-width:1px;
+  class UI,SH,API,AG core;
+  class CS,BG,YT,MW,TT edge;

@@ -1,0 +1,938 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VoiceInsight Extension P0 Side Panel Prototype</title>
+    <script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async></script>
+    <style>
+      :root {
+        --bg-0: #eef3f8;
+        --bg-1: #e2ebf5;
+        --panel-bg: #ffffff;
+        --panel-border: #d4e0ec;
+        --ink-0: #102232;
+        --ink-1: #1f3a52;
+        --ink-2: #5c7286;
+        --brand: #0f71d7;
+        --brand-strong: #0a59ab;
+        --accent: #0f8a69;
+        --danger: #bf314a;
+        --line-bg: #f8fbff;
+        --line-border: #dce8f4;
+        --shadow-lg: 0 24px 58px rgba(9, 38, 66, 0.17);
+        --shadow-md: 0 14px 34px rgba(9, 38, 66, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+
+      body {
+        font-family: "Avenir Next", "Helvetica Neue", "Segoe UI", sans-serif;
+        color: var(--ink-0);
+        background:
+          radial-gradient(circle at 14% 18%, #f9fcff 0%, transparent 45%),
+          radial-gradient(circle at 88% 84%, #dfebfa 0%, transparent 40%),
+          linear-gradient(156deg, var(--bg-0), var(--bg-1));
+        padding: 24px;
+      }
+
+      body.capture-panel-only {
+        padding: 0;
+        background: transparent;
+      }
+
+      .stage {
+        width: min(980px, 100%);
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: 430px minmax(240px, 1fr);
+        gap: 18px;
+        align-items: start;
+      }
+
+      body.capture-panel-only .stage {
+        width: 430px;
+        grid-template-columns: 430px;
+        margin: 0;
+      }
+
+      .panel-wrap {
+        display: grid;
+        gap: 10px;
+      }
+
+      .frame-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+      }
+
+      .meta-chip {
+        border: 1px solid #cfe0f2;
+        background: #f4f9ff;
+        color: #2f4f6a;
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      body.capture-panel-only .frame-meta {
+        width: 430px;
+      }
+
+      .panel {
+        min-height: 820px;
+        border: 1px solid var(--panel-border);
+        border-radius: 20px;
+        background: var(--panel-bg);
+        box-shadow: var(--shadow-lg);
+        overflow: hidden;
+        display: grid;
+        grid-template-rows: auto auto auto 1fr auto;
+      }
+
+      .topbar {
+        padding: 14px;
+        border-bottom: 1px solid #e5edf6;
+        background: linear-gradient(180deg, #ffffff, #f8fbff);
+      }
+
+      .brand-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .logo {
+        width: 30px;
+        height: 30px;
+        border-radius: 9px;
+        background: linear-gradient(140deg, #1684ef, #0c67c3);
+        color: #fff;
+        display: grid;
+        place-items: center;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .title {
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      .subtitle {
+        margin-top: 2px;
+        font-size: 12px;
+        color: var(--ink-2);
+      }
+
+      .lang-switch {
+        display: inline-flex;
+        padding: 2px;
+        border-radius: 999px;
+        background: #edf3fa;
+        border: 1px solid #d4e0ec;
+      }
+
+      .lang-btn {
+        border: 0;
+        min-width: 34px;
+        height: 24px;
+        border-radius: 999px;
+        background: transparent;
+        color: #4f677d;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .lang-btn.active {
+        color: #fff;
+        background: var(--brand);
+      }
+
+      .status-wrap {
+        padding: 12px 14px 0;
+      }
+
+      .status {
+        border-radius: 10px;
+        padding: 10px 11px;
+        border: 1px solid #d8e6f3;
+        background: #eef5fd;
+        color: #34526d;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1.35;
+      }
+
+      .status.loading {
+        border-color: #d2e2f3;
+        background: #ebf3fb;
+        color: #2c4c68;
+      }
+
+      .status.success {
+        border-color: #c8eadf;
+        background: #e9f7f2;
+        color: #135a45;
+      }
+
+      .status.error {
+        border-color: #f0cad4;
+        background: #fdeff3;
+        color: #7d2337;
+      }
+
+      .action-wrap {
+        padding: 10px 14px 12px;
+        border-bottom: 1px solid #e7eef7;
+        display: grid;
+        gap: 8px;
+      }
+
+      .action-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr);
+        gap: 8px;
+      }
+
+      .btn,
+      .select {
+        width: 100%;
+        height: 38px;
+        border-radius: 11px;
+        border: 1px solid #ccd9e6;
+        background: #fff;
+        color: #294258;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .btn {
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 12px;
+        transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+      }
+
+      .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-md);
+      }
+
+      .btn:disabled {
+        cursor: not-allowed;
+        opacity: 0.56;
+        transform: none;
+        box-shadow: none;
+      }
+
+      .btn.primary {
+        color: #fff;
+        border-color: var(--brand);
+        background: var(--brand);
+      }
+
+      .btn.primary:hover {
+        background: #0d66c4;
+      }
+
+      .btn.link {
+        color: var(--brand-strong);
+        background: #edf4ff;
+        border-color: #caddf8;
+      }
+
+      .select {
+        padding: 0 10px;
+      }
+
+      .transcript-header {
+        padding: 10px 14px;
+        border-bottom: 1px solid #e8eff7;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .transcript-title {
+        font-size: 12px;
+        font-weight: 800;
+        color: var(--ink-2);
+      }
+
+      .line-count {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--ink-2);
+      }
+
+      .list {
+        padding: 12px 14px 14px;
+        overflow: auto;
+        display: grid;
+        gap: 8px;
+        background:
+          linear-gradient(180deg, rgba(247, 251, 255, 0.85), rgba(244, 249, 255, 0.95));
+      }
+
+      .line {
+        border: 1px solid var(--line-border);
+        border-radius: 12px;
+        background: var(--line-bg);
+        padding: 10px 11px;
+        display: grid;
+        gap: 7px;
+        cursor: pointer;
+      }
+
+      .line.active {
+        border-color: #87bbe9;
+        background: #ffffff;
+        box-shadow: 0 0 0 2px rgba(15, 113, 215, 0.1);
+      }
+
+      .line-time {
+        color: var(--brand-strong);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .line-text {
+        font-size: 14px;
+        line-height: 1.55;
+        color: #1d3549;
+      }
+
+      .empty,
+      .skeleton-card {
+        border: 1px solid var(--line-border);
+        border-radius: 12px;
+        background: #fff;
+        padding: 12px;
+      }
+
+      .empty-title {
+        font-size: 13px;
+        font-weight: 800;
+        color: #1f3b52;
+        margin-bottom: 6px;
+      }
+
+      .empty-text {
+        font-size: 12px;
+        color: #60778a;
+        line-height: 1.45;
+      }
+
+      .skeleton-card {
+        background: linear-gradient(100deg, #f3f8fd 20%, #e9f2fb 50%, #f3f8fd 80%);
+        background-size: 200% 100%;
+        animation: pulse 1.3s linear infinite;
+        height: 74px;
+      }
+
+      @keyframes pulse {
+        from {
+          background-position: 200% 0;
+        }
+        to {
+          background-position: -200% 0;
+        }
+      }
+
+      .footer {
+        border-top: 1px solid #e5edf5;
+        padding: 10px 14px;
+        background: #fbfdff;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .hint {
+        font-size: 11px;
+        color: #688299;
+      }
+
+      .dock {
+        border: 1px solid #d5e1ee;
+        border-radius: 20px;
+        background: #ffffffcf;
+        backdrop-filter: blur(8px);
+        box-shadow: var(--shadow-md);
+        padding: 14px;
+        display: grid;
+        gap: 12px;
+        position: sticky;
+        top: 18px;
+      }
+
+      body.capture-panel-only .dock {
+        display: none;
+      }
+
+      .dock-title {
+        font-size: 14px;
+        font-weight: 800;
+        color: #1c3a52;
+      }
+
+      .dock-label {
+        font-size: 11px;
+        color: #638096;
+        font-weight: 700;
+      }
+
+      .dock-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .dock-btn {
+        height: 34px;
+        border: 1px solid #cad8e6;
+        border-radius: 9px;
+        background: #fff;
+        color: #2d4a63;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .dock-btn.active {
+        color: #fff;
+        background: var(--brand);
+        border-color: var(--brand);
+      }
+
+      .dock-tip {
+        font-size: 12px;
+        color: #4f6b84;
+        line-height: 1.45;
+        border-radius: 10px;
+        border: 1px dashed #c7d8ea;
+        background: #f4f9ff;
+        padding: 10px;
+      }
+
+      .toast {
+        position: fixed;
+        left: 50%;
+        bottom: 24px;
+        transform: translate(-50%, 20px);
+        opacity: 0;
+        min-width: 230px;
+        max-width: 86vw;
+        border-radius: 999px;
+        background: #0f2435;
+        color: #fff;
+        padding: 10px 14px;
+        font-size: 12px;
+        font-weight: 700;
+        text-align: center;
+        transition: opacity 140ms ease, transform 140ms ease;
+        z-index: 90;
+      }
+
+      .toast.visible {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+
+      @media (max-width: 980px) {
+        body {
+          padding: 10px;
+        }
+
+        .stage {
+          grid-template-columns: 1fr;
+          gap: 10px;
+        }
+
+        .panel {
+          min-height: 88vh;
+        }
+
+        .dock {
+          position: static;
+        }
+
+        .action-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .action-grid .btn.primary {
+          grid-column: span 2;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="captureRoot" class="stage">
+      <div class="panel-wrap">
+      <div class="frame-meta" aria-label="Frame Metadata">
+        <span id="metaPage" class="meta-chip" data-i18n="metaPage">Page: Extension Side Panel</span>
+        <span id="metaState" class="meta-chip">Status: Success</span>
+        <span id="metaLang" class="meta-chip">Language: English</span>
+      </div>
+
+      <main class="panel" aria-label="VoiceInsight Side Panel">
+        <header class="topbar">
+          <div class="brand-row">
+            <div class="brand">
+              <div class="logo">VI</div>
+              <div>
+                <div class="title" data-i18n="title">VoiceInsight</div>
+                <div class="subtitle" data-i18n="subtitle">YouTube Subtitle Assistant</div>
+              </div>
+            </div>
+            <div class="lang-switch" role="group" aria-label="Language">
+              <button class="lang-btn active" type="button" data-lang="zh">中</button>
+              <button class="lang-btn" type="button" data-lang="en">EN</button>
+            </div>
+          </div>
+        </header>
+
+        <section class="status-wrap">
+          <div id="statusBox" class="status success" data-i18n="statusSuccess">Subtitles extracted and rendered by timeline.</div>
+        </section>
+
+        <section class="action-wrap">
+          <div class="action-grid">
+            <button id="downloadBtn" type="button" class="btn primary" data-i18n="btnDownload">Download Subtitles</button>
+            <select id="formatSelect" class="select" aria-label="format select">
+              <option value="txt">TXT (Timestamp)</option>
+              <option value="srt">SRT</option>
+              <option value="vtt" selected>VTT</option>
+            </select>
+            <button id="copyBtn" type="button" class="btn" data-i18n="btnCopy">Copy Transcript</button>
+          </div>
+        </section>
+
+        <section class="transcript-header">
+          <span class="transcript-title" data-i18n="sectionTitle">Transcript</span>
+          <span id="lineCount" class="line-count">0</span>
+        </section>
+
+        <section id="lineList" class="list" aria-live="polite"></section>
+
+        <footer class="footer">
+          <span class="hint" data-i18n="footerHint">Visit VoiceInsight website for more features</span>
+          <button id="guideBtn" type="button" class="btn link" data-i18n="btnGuide">VoiceInsight Website</button>
+        </footer>
+      </main>
+      </div>
+
+      <aside class="dock">
+        <div class="dock-title" data-i18n="dockTitle">Prototype Controls</div>
+        <div class="dock-label" data-i18n="dockScenario">Scenario State</div>
+        <div class="dock-grid">
+          <button type="button" class="dock-btn" data-state="loading" data-i18n="stateLoading">Loading</button>
+          <button type="button" class="dock-btn active" data-state="success" data-i18n="stateSuccess">Success</button>
+          <button type="button" class="dock-btn" data-state="error" data-i18n="stateError">Error</button>
+        </div>
+        <div class="dock-tip" data-i18n="dockTip">Only P0 scope is kept: extract timeline, download, copy, and website CTA.</div>
+      </aside>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script>
+      const I18N = {
+        zh: {
+          title: "VoiceInsight",
+          subtitle: "YouTube 字幕助手",
+          metaPage: "页面：插件侧边栏",
+          metaStatePrefix: "状态：",
+          metaLangPrefix: "语言：",
+          stateShortLoading: "加载中",
+          stateShortSuccess: "成功",
+          stateShortError: "失败",
+          langShortZh: "中文",
+          langShortEn: "英文",
+          statusLoading: "正在提取字幕，请稍候...",
+          statusSuccess: "字幕提取成功，已按时间戳展示。",
+          statusError: "该视频无字幕可下载。",
+          btnDownload: "下载字幕",
+          btnCopy: "复制字幕",
+          sectionTitle: "字幕内容",
+          footerHint: "更多功能请访问 VoiceInsight 官网",
+          btnGuide: "VoiceInsight 官网",
+          dockTitle: "原型交互控制",
+          dockScenario: "场景状态",
+          stateLoading: "加载中",
+          stateSuccess: "成功",
+          stateError: "失败",
+          dockTip: "仅保留 P0 范围：字幕提取、下载、复制、官网引导。",
+          toastCopied: "字幕已复制到剪贴板",
+          toastDownloaded: "已下载 {format} 文件",
+          toastNoTrack: "当前状态下无可下载字幕轨道",
+          toastOpenWeb: "已打开 VoiceInsight 官网",
+          errorTitle: "该视频无字幕轨道",
+          errorText: "可先切换其他视频；后续可补充 ASR/OCR 方案兜底。",
+          loadingCard: "字幕提取中...",
+          count: "共 {count} 条",
+        },
+        en: {
+          title: "VoiceInsight",
+          subtitle: "YouTube Subtitle Assistant",
+          metaPage: "Page: Extension Side Panel",
+          metaStatePrefix: "Status: ",
+          metaLangPrefix: "Language: ",
+          stateShortLoading: "Loading",
+          stateShortSuccess: "Success",
+          stateShortError: "Error",
+          langShortZh: "Chinese",
+          langShortEn: "English",
+          statusLoading: "Extracting subtitles, please wait...",
+          statusSuccess: "Subtitles extracted and rendered by timeline.",
+          statusError: "No subtitles are available for download for this video.",
+          btnDownload: "Download Subtitles",
+          btnCopy: "Copy Transcript",
+          sectionTitle: "Transcript",
+          footerHint: "Visit VoiceInsight website for more features",
+          btnGuide: "VoiceInsight Website",
+          dockTitle: "Prototype Controls",
+          dockScenario: "Scenario State",
+          stateLoading: "Loading",
+          stateSuccess: "Success",
+          stateError: "Error",
+          dockTip: "P0 scope only: extract timeline, download, copy, and website CTA.",
+          toastCopied: "Transcript copied to clipboard",
+          toastDownloaded: "Downloaded as {format}",
+          toastNoTrack: "No subtitle track available in current state",
+          toastOpenWeb: "VoiceInsight website opened",
+          errorTitle: "No subtitle track available",
+          errorText: "Try another video first; ASR/OCR fallback can be added later.",
+          loadingCard: "Extracting subtitle timeline...",
+          count: "{count} lines",
+        },
+      };
+
+      const LINES = [
+        { start: 0, text: "That's right, we're back again because the year's not over and we've got another new watch from Amazfit to discuss." },
+        { start: 16, text: "This is the brand new Amazfit Active Max, positioned between their budget line and premium line." },
+        { start: 34, text: "You get better battery life, brighter AMOLED display, and improved workout tracking profiles." },
+        { start: 52, text: "At this price, it also supports offline maps, podcast sync, and local music playback controls." },
+        { start: 71, text: "Let's break down where this watch is excellent and where product improvements are still needed." },
+        { start: 93, text: "If your team is planning features, user comments under these videos are often the fastest demand signal." },
+        { start: 119, text: "That's exactly why transcript extraction plus recurring social monitoring can speed up product iteration." },
+      ];
+
+      const state = {
+        locale: "zh",
+        uiState: "success",
+        format: "vtt",
+        activeIndex: 0,
+      };
+
+      const statusBox = document.getElementById("statusBox");
+      const lineList = document.getElementById("lineList");
+      const lineCount = document.getElementById("lineCount");
+      const formatSelect = document.getElementById("formatSelect");
+      const downloadBtn = document.getElementById("downloadBtn");
+      const copyBtn = document.getElementById("copyBtn");
+      const guideBtn = document.getElementById("guideBtn");
+      const metaState = document.getElementById("metaState");
+      const metaLang = document.getElementById("metaLang");
+      const langBtns = Array.from(document.querySelectorAll(".lang-btn"));
+      const dockStateBtns = Array.from(document.querySelectorAll(".dock-btn[data-state]"));
+      const toast = document.getElementById("toast");
+
+      let toastTimer;
+
+      function t(key, vars = {}) {
+        const dict = I18N[state.locale] || I18N.en;
+        let text = dict[key] || key;
+        Object.entries(vars).forEach(([name, value]) => {
+          text = text.replace(`{${name}}`, String(value));
+        });
+        return text;
+      }
+
+      function parseBoolParam(value, fallback) {
+        if (value == null) return fallback;
+        if (["1", "true", "yes", "on"].includes(value.toLowerCase())) return true;
+        if (["0", "false", "no", "off"].includes(value.toLowerCase())) return false;
+        return fallback;
+      }
+
+      function formatMMSS(seconds) {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+      }
+
+      function toSrtTime(seconds) {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = Math.floor(seconds % 60);
+        const ms = Math.floor((seconds - Math.floor(seconds)) * 1000);
+        return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")},${String(ms).padStart(3, "0")}`;
+      }
+
+      function toVttTime(seconds) {
+        return toSrtTime(seconds).replace(",", ".");
+      }
+
+      function readInitialPresetFromQuery() {
+        const params = new URLSearchParams(window.location.search);
+        const preset = { initialState: "success", toastType: "" };
+
+        const panelOnly = parseBoolParam(params.get("panelOnly"), false);
+        if (panelOnly) {
+          document.body.classList.add("capture-panel-only");
+        }
+
+        const lang = params.get("lang");
+        if (lang === "en" || lang === "zh") {
+          state.locale = lang;
+        }
+
+        const uiState = params.get("state");
+        if (uiState === "loading" || uiState === "success" || uiState === "error") {
+          preset.initialState = uiState;
+        }
+
+        const format = params.get("format");
+        if (format === "txt" || format === "srt" || format === "vtt") {
+          state.format = format;
+        }
+
+        const line = Number.parseInt(params.get("line") || "", 10);
+        if (Number.isInteger(line) && line >= 0 && line < LINES.length) {
+          state.activeIndex = line;
+        }
+
+        const toastType = params.get("toast");
+        if (toastType === "copied" || toastType === "downloaded" || toastType === "noTrack" || toastType === "openWeb") {
+          preset.toastType = toastType;
+        }
+
+        return preset;
+      }
+
+      function applyI18n() {
+        document.querySelectorAll("[data-i18n]").forEach((el) => {
+          const key = el.getAttribute("data-i18n");
+          if (key) el.textContent = t(key);
+        });
+
+        langBtns.forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.lang === state.locale);
+        });
+
+        renderFrameMeta();
+      }
+
+      function renderFrameMeta() {
+        const stateKey = state.uiState === "loading"
+          ? "stateShortLoading"
+          : state.uiState === "error"
+            ? "stateShortError"
+            : "stateShortSuccess";
+        const langKey = state.locale === "en" ? "langShortEn" : "langShortZh";
+        metaState.textContent = `${t("metaStatePrefix")}${t(stateKey)}`;
+        metaLang.textContent = `${t("metaLangPrefix")}${t(langKey)}`;
+      }
+
+      function renderStatus() {
+        statusBox.classList.remove("loading", "success", "error");
+        if (state.uiState === "loading") {
+          statusBox.classList.add("loading");
+          statusBox.textContent = t("statusLoading");
+          return;
+        }
+        if (state.uiState === "error") {
+          statusBox.classList.add("error");
+          statusBox.textContent = t("statusError");
+          return;
+        }
+        statusBox.classList.add("success");
+        statusBox.textContent = t("statusSuccess");
+      }
+
+      function renderControlsAvailability() {
+        const disabled = state.uiState !== "success";
+        downloadBtn.disabled = disabled;
+        copyBtn.disabled = disabled;
+      }
+
+      function renderList() {
+        lineList.innerHTML = "";
+
+        if (state.uiState === "loading") {
+          for (let i = 0; i < 5; i += 1) {
+            const skeleton = document.createElement("article");
+            skeleton.className = "skeleton-card";
+            skeleton.setAttribute("aria-label", t("loadingCard"));
+            lineList.appendChild(skeleton);
+          }
+          lineCount.textContent = t("count", { count: 0 });
+          return;
+        }
+
+        if (state.uiState === "error") {
+          const empty = document.createElement("article");
+          empty.className = "empty";
+          empty.innerHTML = `<div class="empty-title">${t("errorTitle")}</div><div class="empty-text">${t("errorText")}</div>`;
+          lineList.appendChild(empty);
+          lineCount.textContent = t("count", { count: 0 });
+          return;
+        }
+
+        LINES.forEach((line, idx) => {
+          const item = document.createElement("article");
+          item.className = "line";
+          if (idx === state.activeIndex) item.classList.add("active");
+          item.innerHTML = `
+            <div class="line-time">${formatMMSS(line.start)}</div>
+            <div class="line-text">${line.text}</div>
+          `;
+          item.addEventListener("click", () => {
+            state.activeIndex = idx;
+            renderList();
+          });
+          lineList.appendChild(item);
+        });
+
+        lineCount.textContent = t("count", { count: LINES.length });
+      }
+
+      function renderState(nextState) {
+        state.uiState = nextState;
+        dockStateBtns.forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.state === nextState);
+        });
+        renderFrameMeta();
+        renderStatus();
+        renderControlsAvailability();
+        renderList();
+      }
+
+      function showToast(message) {
+        window.clearTimeout(toastTimer);
+        toast.textContent = message;
+        toast.classList.add("visible");
+        toastTimer = window.setTimeout(() => {
+          toast.classList.remove("visible");
+        }, 1600);
+      }
+
+      function buildDownloadText(format) {
+        if (format === "txt") {
+          return LINES.map((line) => `[${formatMMSS(line.start)}] ${line.text}`).join("\n");
+        }
+
+        if (format === "srt") {
+          return LINES.map((line, idx) => {
+            const start = line.start;
+            const end = idx < LINES.length - 1 ? Math.max(start + 1, LINES[idx + 1].start - 0.2) : start + 3;
+            return `${idx + 1}\n${toSrtTime(start)} --> ${toSrtTime(end)}\n${line.text}`;
+          }).join("\n\n");
+        }
+
+        const body = LINES.map((line, idx) => {
+          const start = line.start;
+          const end = idx < LINES.length - 1 ? Math.max(start + 1, LINES[idx + 1].start - 0.2) : start + 3;
+          return `${toVttTime(start)} --> ${toVttTime(end)}\n${line.text}`;
+        }).join("\n\n");
+        return `WEBVTT\n\n${body}`;
+      }
+
+      function downloadCurrent() {
+        if (state.uiState !== "success") {
+          showToast(t("toastNoTrack"));
+          return;
+        }
+        const format = state.format;
+        const text = buildDownloadText(format);
+        const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `voiceinsight-subtitles.${format}`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast(t("toastDownloaded", { format: format.toUpperCase() }));
+      }
+
+      function copyCurrent() {
+        if (state.uiState !== "success") {
+          showToast(t("toastNoTrack"));
+          return;
+        }
+        const text = buildDownloadText("txt");
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(
+            () => showToast(t("toastCopied")),
+            () => showToast(t("toastNoTrack")),
+          );
+          return;
+        }
+        showToast(t("toastNoTrack"));
+      }
+
+      function openVoiceInsight() {
+        window.open("https://voiceinsight.app", "_blank", "noopener,noreferrer");
+        showToast(t("toastOpenWeb"));
+      }
+
+      langBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          state.locale = btn.dataset.lang === "en" ? "en" : "zh";
+          applyI18n();
+          renderState(state.uiState);
+        });
+      });
+
+      dockStateBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          renderState(btn.dataset.state);
+        });
+      });
+
+      formatSelect.addEventListener("change", (e) => {
+        state.format = e.target.value;
+      });
+
+      downloadBtn.addEventListener("click", downloadCurrent);
+      copyBtn.addEventListener("click", copyCurrent);
+      guideBtn.addEventListener("click", openVoiceInsight);
+
+      const preset = readInitialPresetFromQuery();
+      formatSelect.value = state.format;
+      applyI18n();
+      renderState(preset.initialState);
+
+      if (preset.toastType) {
+        if (preset.toastType === "copied") showToast(t("toastCopied"));
+        if (preset.toastType === "downloaded") showToast(t("toastDownloaded", { format: state.format.toUpperCase() }));
+        if (preset.toastType === "noTrack") showToast(t("toastNoTrack"));
+        if (preset.toastType === "openWeb") showToast(t("toastOpenWeb"));
+      }
+    </script>
+  </body>
+</html>

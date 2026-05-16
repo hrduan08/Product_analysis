@@ -20,7 +20,7 @@ test.beforeAll(async () => {
   process.env.MAIL_PROVIDER = 'stub';
   process.env.MAIL_TO = '';
   process.env.ALERT_SLACK_WEBHOOK = '';
-  process.env.CRON_ENABLED = 'false';
+  process.env.USER_SEARCH_CRON_ENABLED = 'false';
   process.env.PAYMENT_ORDER_PREFIX = 'PW';
 
   if (!process.env.DATABASE_URL) {

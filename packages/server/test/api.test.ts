@@ -3,7 +3,6 @@ import request from 'supertest';
 import nock from 'nock';
 
 import app from '../src/app.js';
-import { RedditTokenManager } from '../src/auth/reddit-token-manager.js';
 
 describe('/api/search', () => {
   beforeAll(() => {
@@ -65,13 +64,8 @@ describe('/api/search', () => {
   });
 
   it('returns Reddit results', async () => {
-    vi.spyOn(RedditTokenManager.prototype, 'getToken').mockResolvedValue({
-      token: 'token',
-      userAgent: 'demo'
-    });
-
-    nock('https://oauth.reddit.com')
-      .get('/search')
+    nock('https://www.reddit.com')
+      .get('/search.json')
       .query((query) => query.q === 'Apple')
       .reply(200, {
         data: {

@@ -24,6 +24,17 @@ const patchSchema = z
     redditCommunities: z.array(z.string()).optional(),
     redditKeywords: z.array(z.string()).optional(),
     youtubeKeywords: z.array(z.string()).optional(),
+    productWebsiteUrl: z.string().optional(),
+    productCommerceUrl: z.string().optional(),
+    productDescription: z.string().optional(),
+    productProfile: z
+      .object({
+        brand: z.string().optional(),
+        productName: z.string().optional(),
+        category: z.string().optional(),
+        coreFeatures: z.array(z.string()).optional()
+      })
+      .optional(),
     notifyEmail: z.string().optional(),
     timezone: z.string().optional(),
     notifyChannels: z.array(z.enum(['email', 'feishu'] as const)).optional(),
@@ -48,7 +59,8 @@ router.get('/app/search-config', async (req, res, next) => {
         maxRedditCommunities: config.limits.maxRedditCommunities,
         maxRedditKeywords: config.limits.maxRedditKeywords,
         maxYoutubeKeywords: config.limits.maxYoutubeKeywords,
-        defaultTimezone: SEARCH_CONFIG_DEFAULT_TIMEZONE
+        defaultTimezone: SEARCH_CONFIG_DEFAULT_TIMEZONE,
+        redditBetaAllowed: config.meta.redditBetaAllowed
       }
     });
   } catch (error) {
@@ -94,6 +106,19 @@ function serializeConfig(config: {
   youtubeKeywords: string[];
   notifyEmail: string;
   timezone: string;
+  productWebsiteUrl: string;
+  productCommerceUrl: string;
+  productDescription: string;
+  productProfile: {
+    status: string;
+    error: string | null;
+    generatedAt: Date | null;
+    updatedByUser: boolean;
+    brand: string;
+    productName: string;
+    category: string;
+    coreFeatures: string[];
+  };
   notifyChannels: string[];
   feishuWebhook: string;
   feishuStatus: string | null;
@@ -109,6 +134,9 @@ function serializeConfig(config: {
     maxRedditKeywords: number;
     maxYoutubeKeywords: number;
   };
+  meta: {
+    redditBetaAllowed: boolean;
+  };
 }) {
   return {
     userId: config.userId,
@@ -118,6 +146,19 @@ function serializeConfig(config: {
     youtubeKeywords: config.youtubeKeywords,
     notifyEmail: config.notifyEmail,
     timezone: config.timezone,
+    productWebsiteUrl: config.productWebsiteUrl,
+    productCommerceUrl: config.productCommerceUrl,
+    productDescription: config.productDescription,
+    productProfile: {
+      status: config.productProfile.status,
+      error: config.productProfile.error,
+      generatedAt: config.productProfile.generatedAt ? config.productProfile.generatedAt.toISOString() : null,
+      updatedByUser: config.productProfile.updatedByUser,
+      brand: config.productProfile.brand,
+      productName: config.productProfile.productName,
+      category: config.productProfile.category,
+      coreFeatures: config.productProfile.coreFeatures
+    },
     notifyChannels: config.notifyChannels,
     feishuWebhook: config.feishuWebhook,
     feishuStatus: config.feishuStatus,

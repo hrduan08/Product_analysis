@@ -1,0 +1,10 @@
+flowchart TB
+  CL[Client Layer\nExtension / Web App]
+  SL[Service Layer\nAPI Gateway / Orchestrator]
+  EL[Execution Layer\nAgent / Scheduler / Worker]
+  DL[Data & Delivery Layer\nPostgreSQL / Redis / Feishu / Email]
+
+  CL --> SL --> EL --> DL
+
+  classDef node fill:#eefaf2,stroke:#22a06b,stroke-width:1px;
+  class CL,SL,EL,DL node;

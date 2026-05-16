@@ -1,0 +1,21 @@
+sequenceDiagram
+  participant U as User
+  participant Y as YouTube Page
+  participant C as contentScript
+  participant P as popup.js
+  participant A as VoiceInsight API/Agent
+
+  U->>Y: 打开/切换视频
+  Y->>C: yt-navigate-* / popstate / hashchange
+  C->>C: debounce + 解析 videoId
+  C->>P: VI_ACTIVE_VIDEO_CHANGED
+  U->>P: 打开插件面板
+  P->>P: init + bindEvents + startWatchers
+  P->>P: refreshTranscript()
+  P->>P: getActiveYoutubeTabInfo()
+  P->>A: ensureVoiceInsightAgentReady()（条件触发）
+  P->>P: fetchTranscriptWithFallback()
+  P->>P: normalizeTranscriptEntries()
+  P->>P: resolveTranscriptLanguageMetadata()
+  P->>P: alignTranscriptDisplayTimestampsInBackground()
+  P-->>U: 渲染字幕、语言、状态

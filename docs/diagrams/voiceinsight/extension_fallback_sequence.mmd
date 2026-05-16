@@ -1,0 +1,26 @@
+sequenceDiagram
+  participant P as popup.js
+  participant A as VoiceInsight API
+  participant M as Main World Captions Meta
+  participant T as timedtext
+  participant C as PAGE_CAPTURE
+
+  P->>P: ensureMainWorldVideoContextReady
+  P->>M: prefetchCaptionTrackMetadata
+  P->>A: VOICEINSIGHT_API (youtube-transcript-api -> yt-dlp)
+  alt API成功
+    A-->>P: timeline
+  else API失败
+    P->>M: CAPTION_TRACK
+    alt CAPTION_TRACK成功
+      M-->>P: timeline
+    else CAPTION_TRACK失败
+      P->>T: TIMEDTEXT_LIST
+      alt TIMEDTEXT_LIST成功
+        T-->>P: timeline
+      else TIMEDTEXT_LIST失败
+        P->>C: PAGE_CAPTURE (no-open -> open)
+        C-->>P: timeline 或 error
+      end
+    end
+  end
