@@ -65,6 +65,7 @@ export function SearchConfigPage(): JSX.Element {
   const [productNameDraft, setProductNameDraft] = useState('');
   const [productCategoryDraft, setProductCategoryDraft] = useState('');
   const [coreFeatureInput, setCoreFeatureInput] = useState('');
+  const [productProfileLocalDirty, setProductProfileLocalDirty] = useState(false);
 
   const [emailDraft, setEmailDraft] = useState('');
   const [feishuDraft, setFeishuDraft] = useState('');
@@ -112,26 +113,29 @@ export function SearchConfigPage(): JSX.Element {
       subtitle: '系统会按队列自动执行增量提取，不再需要手动设置每天固定时间。',
       loading: '页面加载中...',
       sectionPlatform: '1. 选择社媒平台',
-      sectionPlatformDesc: '按平台分别配置监控规则。',
+      sectionPlatformDesc: '系统会持续追踪你选择的社媒平台，发现和你设置的产品信息相匹配的热门内容。',
       sectionReddit: '2. Reddit 设置（Beta）',
       sectionYouTube: '3. YouTube 设置',
       sectionProduct: '4. 产品画像',
       sectionNotify: '5. 消息通知',
       disabledHint: '当前未启用该平台',
       betaBadge: 'Beta',
-      redditBetaAllowedHint: 'Reddit Beta 已对白名单账号开放，当前使用低频数据源过渡方案。',
+      redditBetaAllowedHint: '',
       redditBetaLockedHint: 'Reddit 仍处于 Beta 阶段，暂未对当前账号开放。',
       redditProviderDisabledHint: 'Reddit 数据源暂未启用。',
       redditCommunities: '关注社区',
       redditCommunitiesDesc: '填写 Reddit 社区 URL（最多 3 个）。',
       redditCommunityPlaceholder: '例如：https://www.reddit.com/r/AppleWatch/',
       redditKeywords: '社区内关键词筛选',
-      redditKeywordsDesc: '从社区新增内容中再做关键词匹配（最多 2 个，可不填）。',
+      redditKeywordsDesc:
+        '请设置你关注的产品的完整名称，尽量不要缩写。例如AppleWatch、Huawei Watch GT2、Garmin Forerunner 970',
       redditKeywordPlaceholder: '例如：HuaweiWatchGT2',
       youtubeKeywords: '关键词发现',
-      youtubeKeywordsDesc: 'YouTube 关键词全站发现（低频、有限额、best effort，每天最多 1 次）。',
-      youtubeKeywordPlaceholder: '例如：Huawei Watch GT2 review',
-      productInfoDesc: '填写官网链接、电商平台链接和产品介绍后，系统会结合当前关键词自动生成目标产品范围画像，你也可以手动修改并保存。',
+      youtubeKeywordsDesc: '',
+      youtubeKeywordsHint:
+        '请设置你关注的产品的完整名称，尽量不要缩写。例如AppleWatch、Huawei Watch GT2、Garmin Forerunner 970',
+      youtubeKeywordPlaceholder: '例如：Amazfit Active 3',
+      productInfoDesc: '填写官网链接、电商平台链接和产品介绍后，系统会结合当前关键词自动生成产品画像，并自动覆盖你在 YouTube 和 Reddit 中设置的产品关键词。',
       productWebsite: '官网链接',
       productCommerce: '电商平台链接',
       productDescription: '产品介绍',
@@ -140,8 +144,10 @@ export function SearchConfigPage(): JSX.Element {
       productProfileBrand: '品牌',
       productProfileName: '产品名',
       productProfileCategory: '类别',
+      productProfileTargets: '目标产品范围',
       productProfileCoreFeatures: '核心特征',
       productProfileGeneratedAt: '最近生成时间：',
+      emptyTargetProducts: '暂无目标产品',
       addFeature: '添加特征',
       emptyFeatures: '暂无核心特征',
       saveProductSources: '保存并生成画像',
@@ -156,7 +162,7 @@ export function SearchConfigPage(): JSX.Element {
       toastProductProfileSaved: '产品画像已保存',
       addCommunity: '添加社区',
       addKeyword: '添加关键词',
-      notifyDesc: '不管选择 Reddit 或 YouTube，都统一在这里配置通知方式。',
+      notifyDesc: '',
       notifyEmail: '邮件通知',
       notifyEmailPlaceholder: 'name@example.com',
       notifyFeishu: '飞书通知',
@@ -197,26 +203,30 @@ export function SearchConfigPage(): JSX.Element {
       subtitle: 'We run incremental monitoring with an automatic queue. No fixed daily time is needed.',
       loading: 'Loading...',
       sectionPlatform: '1. Choose platforms',
-      sectionPlatformDesc: 'Configure rules by platform.',
+      sectionPlatformDesc:
+        'We continuously track the social platforms you choose and surface popular content that matches your product information.',
       sectionReddit: '2. Reddit settings (Beta)',
       sectionYouTube: '3. YouTube settings',
       sectionProduct: '4. Product profile',
       sectionNotify: '5. Notifications',
       disabledHint: 'This platform is not enabled',
       betaBadge: 'Beta',
-      redditBetaAllowedHint: 'Reddit Beta is enabled for allowlisted accounts and currently uses a low-frequency transitional source.',
+      redditBetaAllowedHint: '',
       redditBetaLockedHint: 'Reddit is still in Beta and is not open to this account yet.',
       redditProviderDisabledHint: 'Reddit data source is not enabled.',
       redditCommunities: 'Communities',
       redditCommunitiesDesc: 'Add Reddit community URLs (up to 3).',
       redditCommunityPlaceholder: 'e.g. https://www.reddit.com/r/AppleWatch/',
       redditKeywords: 'In-source keyword filter',
-      redditKeywordsDesc: 'Match keywords from community incremental content (up to 2, optional).',
+      redditKeywordsDesc:
+        'Use the full product name you care about and avoid abbreviations whenever possible. Examples: AppleWatch, Huawei Watch GT2, Garmin Forerunner 970.',
       redditKeywordPlaceholder: 'e.g. HuaweiWatchGT2',
       youtubeKeywords: 'Keyword discovery',
-      youtubeKeywordsDesc: 'YouTube global keyword discovery (low-frequency, budgeted, best effort, max once/day).',
-      youtubeKeywordPlaceholder: 'e.g. Huawei Watch GT2 review',
-      productInfoDesc: 'Add product links or description. We will auto-generate a product profile focused on the target product scope implied by your keywords, and you can edit it before saving.',
+      youtubeKeywordsDesc: '',
+      youtubeKeywordsHint:
+        'Use the full product name you care about and avoid abbreviations whenever possible. Examples: AppleWatch, Huawei Watch GT2, Garmin Forerunner 970.',
+      youtubeKeywordPlaceholder: 'e.g. Amazfit Active 3',
+      productInfoDesc: 'Add product links or description. We will auto-generate a product profile and automatically cover the product keywords you configured for YouTube and Reddit.',
       productWebsite: 'Official website URL',
       productCommerce: 'Commerce URL',
       productDescription: 'Product description',
@@ -225,8 +235,10 @@ export function SearchConfigPage(): JSX.Element {
       productProfileBrand: 'Brand',
       productProfileName: 'Product name',
       productProfileCategory: 'Category',
+      productProfileTargets: 'Target products',
       productProfileCoreFeatures: 'Core features',
       productProfileGeneratedAt: 'Last generated: ',
+      emptyTargetProducts: 'No target products yet',
       addFeature: 'Add feature',
       emptyFeatures: 'No core features yet',
       saveProductSources: 'Save & generate profile',
@@ -241,7 +253,7 @@ export function SearchConfigPage(): JSX.Element {
       toastProductProfileSaved: 'Product profile saved',
       addCommunity: 'Add community',
       addKeyword: 'Add keyword',
-      notifyDesc: 'Notification settings are shared by Reddit and YouTube.',
+      notifyDesc: '',
       notifyEmail: 'Email',
       notifyEmailPlaceholder: 'name@example.com',
       notifyFeishu: 'Feishu',
@@ -315,6 +327,7 @@ export function SearchConfigPage(): JSX.Element {
         setProductBrandDraft(response.config.productProfile.brand ?? '');
         setProductNameDraft(response.config.productProfile.productName ?? '');
         setProductCategoryDraft(response.config.productProfile.category ?? '');
+        setProductProfileLocalDirty(false);
       } catch (error) {
         if (!cancelled) {
           const message = error instanceof Error ? error.message : TEXT.toastLoadFail;
@@ -422,6 +435,9 @@ export function SearchConfigPage(): JSX.Element {
       setProductBrandDraft(updated.productProfile.brand ?? '');
       setProductNameDraft(updated.productProfile.productName ?? '');
       setProductCategoryDraft(updated.productProfile.category ?? '');
+      if ('productProfile' in requestPayload) {
+        setProductProfileLocalDirty(false);
+      }
       if ('feishuWebhook' in requestPayload) {
         setFeishuDraft(updated.feishuWebhook ?? '');
       }
@@ -436,6 +452,9 @@ export function SearchConfigPage(): JSX.Element {
       setProductBrandDraft(previous.productProfile.brand ?? '');
       setProductNameDraft(previous.productProfile.productName ?? '');
       setProductCategoryDraft(previous.productProfile.category ?? '');
+      if ('productProfile' in requestPayload) {
+        setProductProfileLocalDirty(false);
+      }
       showToast(error instanceof Error ? error.message : TEXT.toastUpdateFail, 'error');
     } finally {
       setSaving(false);
@@ -606,6 +625,7 @@ export function SearchConfigPage(): JSX.Element {
         coreFeatures: [...config.productProfile.coreFeatures, value]
       }
     });
+    setProductProfileLocalDirty(true);
     setCoreFeatureInput('');
   };
 
@@ -618,6 +638,7 @@ export function SearchConfigPage(): JSX.Element {
         coreFeatures: config.productProfile.coreFeatures.filter((item) => item !== feature)
       }
     });
+    setProductProfileLocalDirty(true);
   };
 
   const handleSaveProductProfile = async () => {
@@ -626,7 +647,8 @@ export function SearchConfigPage(): JSX.Element {
       brand: productBrandDraft.trim(),
       productName: productNameDraft.trim(),
       category: productCategoryDraft.trim(),
-      coreFeatures: config.productProfile.coreFeatures
+      coreFeatures: config.productProfile.coreFeatures,
+      targetProducts: config.productProfile.targetProducts
     };
 
     await applyPatch(
@@ -916,7 +938,8 @@ export function SearchConfigPage(): JSX.Element {
   const productProfileDirty =
     productBrandDraft.trim() !== (config.productProfile.brand?.trim() ?? '') ||
     productNameDraft.trim() !== (config.productProfile.productName?.trim() ?? '') ||
-    productCategoryDraft.trim() !== (config.productProfile.category?.trim() ?? '');
+    productCategoryDraft.trim() !== (config.productProfile.category?.trim() ?? '') ||
+    productProfileLocalDirty;
   const productProfileStatusLabel =
     config.productProfile.updatedByUser
       ? TEXT.productStatusManual
@@ -950,7 +973,7 @@ export function SearchConfigPage(): JSX.Element {
 
           <section className="config-section">
             <h3>{TEXT.sectionPlatform}</h3>
-            <p className="config-section__hint">{TEXT.sectionPlatformDesc}</p>
+            {TEXT.sectionPlatformDesc ? <p className="config-section__hint">{TEXT.sectionPlatformDesc}</p> : null}
             <div className="platform-toggle">
               {PLATFORM_OPTIONS.map((option) => {
                 const isReddit = option.value === 'reddit';
@@ -972,13 +995,13 @@ export function SearchConfigPage(): JSX.Element {
                 );
               })}
             </div>
-            <p className="config-section__hint">
-              {!redditProviderEnabled
-                ? TEXT.redditProviderDisabledHint
-                : redditBetaAllowed
-                  ? TEXT.redditBetaAllowedHint
-                  : TEXT.redditBetaLockedHint}
-            </p>
+            {!redditProviderEnabled ? (
+              <p className="config-section__hint">{TEXT.redditProviderDisabledHint}</p>
+            ) : redditBetaAllowed ? (
+              TEXT.redditBetaAllowedHint ? <p className="config-section__hint">{TEXT.redditBetaAllowedHint}</p> : null
+            ) : (
+              <p className="config-section__hint">{TEXT.redditBetaLockedHint}</p>
+            )}
           </section>
 
           <section className="config-section">
@@ -1026,7 +1049,7 @@ export function SearchConfigPage(): JSX.Element {
                   </button>
                 </form>
 
-                <p className="config-section__hint">{TEXT.redditKeywordsDesc}</p>
+                {TEXT.redditKeywordsDesc ? <p className="config-section__hint">{TEXT.redditKeywordsDesc}</p> : null}
                 <div className="config-chip-list">
                   {config.redditKeywords.map((keyword) => (
                     <span key={keyword} className="config-chip">
@@ -1070,7 +1093,8 @@ export function SearchConfigPage(): JSX.Element {
               <p className="config-section__hint">{TEXT.disabledHint}</p>
             ) : (
               <>
-                <p className="config-section__hint">{TEXT.youtubeKeywordsDesc}</p>
+                {TEXT.youtubeKeywordsDesc ? <p className="config-section__hint">{TEXT.youtubeKeywordsDesc}</p> : null}
+                {TEXT.youtubeKeywordsHint ? <p className="config-section__hint">{TEXT.youtubeKeywordsHint}</p> : null}
                 <div className="config-chip-list">
                   {config.youtubeKeywords.map((keyword) => (
                     <span key={keyword} className="config-chip">
@@ -1178,6 +1202,18 @@ export function SearchConfigPage(): JSX.Element {
               />
             </div>
 
+            <p className="config-section__hint">{TEXT.productProfileTargets}</p>
+            <div className="config-chip-list">
+              {config.productProfile.targetProducts.map((target) => (
+                <span key={target.name} className="config-chip">
+                  {target.name}
+                </span>
+              ))}
+              {config.productProfile.targetProducts.length === 0 ? (
+                <span className="config-empty">{TEXT.emptyTargetProducts}</span>
+              ) : null}
+            </div>
+
             <p className="config-section__hint">{TEXT.productProfileCoreFeatures}</p>
             <div className="config-chip-list">
               {config.productProfile.coreFeatures.map((feature) => (
@@ -1219,7 +1255,7 @@ export function SearchConfigPage(): JSX.Element {
 
           <section className="config-section">
             <h3>{TEXT.sectionNotify}</h3>
-            <p className="config-section__hint">{TEXT.notifyDesc}</p>
+            {TEXT.notifyDesc ? <p className="config-section__hint">{TEXT.notifyDesc}</p> : null}
             <div className="platform-toggle">
               {CHANNEL_ORDER.map((channel) => (
                 <button

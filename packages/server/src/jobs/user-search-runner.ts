@@ -32,6 +32,7 @@ import { sendFeishuWebhookMessage, type FeishuWebhookPayload } from '../services
 import {
   buildProductProfileSummary,
   hasUsableProductProfile,
+  normalizeTargetProducts,
   rerankCandidatesAgainstProfile,
   type ProductProfile
 } from '../services/product-profile.js';
@@ -59,7 +60,7 @@ const NUMBER_FORMATTER = new Intl.NumberFormat('zh-CN');
 const MAX_TOTAL_PUSH_ITEMS = 4;
 const OBSERVATION_WINDOW_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const MAX_RERANK_CANDIDATES_PER_PLATFORM = 20;
+const PRODUCT_PROFILE_PREFILTER_ENABLED = process.env.PRODUCT_PROFILE_PREFILTER_ENABLED === 'true';
 const RERANK_PASS_SCORE = Number(process.env.PRODUCT_PROFILE_RERANK_THRESHOLD ?? '0.08');
 
 type SelectedFeedbackEntity = FeedbackEntity & {
@@ -149,7 +150,8 @@ export async function runUserSearchConfigJobs(
           brand: config.product_profile_brand ?? '',
           productName: config.product_profile_product_name ?? '',
           category: config.product_profile_category ?? '',
-          coreFeatures: config.product_profile_core_features ?? []
+          coreFeatures: config.product_profile_core_features ?? [],
+          targetProducts: normalizeTargetProducts(config.product_profile_targets)
         },
         redditCommunities,
         redditKeywords,
@@ -829,55 +831,71 @@ async function applyProductProfileFiltering(params: {
     };
   }
 
-  const prefiltered = params.candidates.filter((candidate) =>
-    passesProfilePreFilter(candidate, params.productProfile, params.targetKeywords)
+  const exactPassed = params.candidates.filter((candidate) =>
+    passesExactProductSignal(candidate, params.productProfile, params.targetKeywords)
   );
-  const prefilteredIds = new Set(prefiltered.map((candidate) => candidate.id));
-  const rejectedByRule = params.candidates.filter((candidate) => !prefilteredIds.has(candidate.id));
+  const exactPassedIds = new Set(exactPassed.map((candidate) => candidate.id));
 
-  if (rejectedByRule.length > 0) {
+  const remainingCandidates = params.candidates.filter((candidate) => !exactPassedIds.has(candidate.id));
+  const prefiltered = PRODUCT_PROFILE_PREFILTER_ENABLED
+    ? remainingCandidates.filter((candidate) =>
+        passesProfilePreFilter(candidate, params.productProfile, params.targetKeywords)
+      )
+    : remainingCandidates;
+
+  if (PRODUCT_PROFILE_PREFILTER_ENABLED) {
+    const prefilteredIds = new Set(prefiltered.map((candidate) => candidate.id));
+    const rejectedByRule = remainingCandidates.filter((candidate) => !prefilteredIds.has(candidate.id));
+
+    if (rejectedByRule.length > 0) {
+      await updateUserFeedbackFilterResults(
+        params.userId,
+        rejectedByRule.map((candidate) => ({
+          feedbackItemId: candidate.id,
+          status: 'rejected_pre_filter',
+          score: null,
+          reason: 'no_profile_signals'
+        }))
+      );
+    }
+  }
+
+  if (exactPassed.length > 0) {
     await updateUserFeedbackFilterResults(
       params.userId,
-      rejectedByRule.map((candidate) => ({
+      exactPassed.map((candidate) => ({
         feedbackItemId: candidate.id,
-        status: 'rejected_pre_filter',
+        status: 'passed_exact_match',
         score: null,
-        reason: 'no_profile_signals'
+        reason: 'exact_keyword_or_product_match'
       }))
     );
   }
 
-  const limitedCandidates = [
-    ...sortPlatformCandidates(prefiltered.filter((candidate) => candidate.platform === 'youtube')).slice(
-      0,
-      MAX_RERANK_CANDIDATES_PER_PLATFORM
-    ),
-    ...sortPlatformCandidates(prefiltered.filter((candidate) => candidate.platform === 'reddit')).slice(
-      0,
-      MAX_RERANK_CANDIDATES_PER_PLATFORM
-    )
-  ];
-
-  if (limitedCandidates.length === 0) {
-    return { passed: [], prefiltered };
+  if (prefiltered.length === 0) {
+    console.log(
+      `${params.logLabel}[profile] 原始 ${params.candidates.length} 条，直通 ${exactPassed.length} 条，预过滤 ${prefiltered.length} 条，送入 reranker 0 条，通过 ${exactPassed.length} 条${PRODUCT_PROFILE_PREFILTER_ENABLED ? '' : '（预过滤已关闭）'}`
+    );
+    return { passed: exactPassed, prefiltered };
   }
 
   try {
     const rerankResults = await rerankCandidatesAgainstProfile({
       profile: params.productProfile,
       targetKeywords: params.targetKeywords,
-      candidates: limitedCandidates.map((candidate) => ({
+      candidates: prefiltered.map((candidate) => ({
         id: candidate.id,
         text: buildCandidateSemanticText(candidate)
       }))
     });
 
     const scores = new Map(rerankResults.map((item) => [item.id, item.score]));
-    const passed = limitedCandidates.filter((candidate) => (scores.get(candidate.id) ?? 0) >= RERANK_PASS_SCORE);
-    const failed = limitedCandidates.filter((candidate) => !passed.some((item) => item.id === candidate.id));
+    const rerankerPassed = prefiltered.filter((candidate) => (scores.get(candidate.id) ?? 0) >= RERANK_PASS_SCORE);
+    const failed = prefiltered.filter((candidate) => !rerankerPassed.some((item) => item.id === candidate.id));
+    const passed = [...exactPassed, ...rerankerPassed];
 
     await updateUserFeedbackFilterResults(params.userId, [
-      ...passed.map((candidate) => ({
+      ...rerankerPassed.map((candidate) => ({
         feedbackItemId: candidate.id,
         status: 'passed_reranker',
         score: scores.get(candidate.id) ?? null,
@@ -892,7 +910,7 @@ async function applyProductProfileFiltering(params: {
     ]);
 
     console.log(
-      `${params.logLabel}[profile] 原始 ${params.candidates.length} 条，预过滤 ${prefiltered.length} 条，送入 reranker ${limitedCandidates.length} 条，通过 ${passed.length} 条`
+      `${params.logLabel}[profile] 原始 ${params.candidates.length} 条，直通 ${exactPassed.length} 条，预过滤 ${prefiltered.length} 条，送入 reranker ${prefiltered.length} 条，通过 ${passed.length} 条${PRODUCT_PROFILE_PREFILTER_ENABLED ? '' : '（预过滤已关闭）'}`
     );
 
     return { passed, prefiltered };
@@ -901,14 +919,14 @@ async function applyProductProfileFiltering(params: {
     console.warn(`${params.logLabel}[profile] reranker 过滤失败，回退到预过滤结果：${message}`);
     await updateUserFeedbackFilterResults(
       params.userId,
-      limitedCandidates.map((candidate) => ({
+      prefiltered.map((candidate) => ({
         feedbackItemId: candidate.id,
         status: 'passed_reranker_fallback',
         score: null,
         reason: 'reranker_error'
-      }))
-    );
-    return { passed: limitedCandidates, prefiltered };
+        }))
+      );
+    return { passed: [...exactPassed, ...prefiltered], prefiltered };
   }
 }
 
@@ -985,6 +1003,8 @@ function passesProfilePreFilter(
     profile.brand,
     profile.productName,
     ...profile.coreFeatures,
+    ...profile.targetProducts.map((target) => target.name),
+    ...profile.targetProducts.flatMap((target) => target.coreFeatures),
     ...targetKeywords
   ]);
 
@@ -1001,6 +1021,42 @@ function passesProfilePreFilter(
 
     const tokens = tokenizeNormalizedText(normalizedPhrase);
     if (tokens.length >= 2 && tokens.every((token) => tokenSet.has(token))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function passesExactProductSignal(
+  item: SelectedFeedbackEntity,
+  profile: ProductProfile,
+  targetKeywords: string[]
+): boolean {
+  if (item.matchedKeywords.length > 0) {
+    return true;
+  }
+
+  const textTargets = [item.title ?? '', item.description ?? '', ...(item.tags ?? [])]
+    .map(normalizeSearchText)
+    .filter(Boolean);
+
+  if (textTargets.length === 0) {
+    return false;
+  }
+
+  const exactSignals = dedupeKeywords([
+    ...targetKeywords,
+    profile.productName,
+    ...profile.targetProducts.map((target) => target.name)
+  ]);
+
+  for (const signal of exactSignals) {
+    const normalizedSignal = normalizeSearchText(signal);
+    if (!normalizedSignal) {
+      continue;
+    }
+    if (textTargets.some((text) => text.includes(normalizedSignal))) {
       return true;
     }
   }
@@ -1139,51 +1195,55 @@ async function runYoutubeKeywordSearch(params: {
   let finishedAt = new Date();
 
   const youtubeProvider = resolveProvider('youtube');
-  const query = buildCombinedKeywordQuery(params.keywords);
+  const queries = buildYoutubeQueries(params.keywords);
 
-  try {
-    const result = await youtubeProvider.search({
-      query,
-      limit: params.fetchLimit,
-      relevanceLanguage: params.relevanceLanguage,
-      regionCode: params.regionCode,
-      order: 'viewCount',
-      publishedAfter: new Date(params.now.getTime() - OBSERVATION_WINDOW_DAYS * DAY_MS).toISOString(),
-      maxPages: 1
-    });
+  for (const query of queries) {
+    try {
+      const result = await youtubeProvider.search({
+        query,
+        limit: params.fetchLimit,
+        relevanceLanguage: params.relevanceLanguage,
+        regionCode: params.regionCode,
+        order: 'viewCount',
+        publishedAfter: new Date(params.now.getTime() - OBSERVATION_WINDOW_DAYS * DAY_MS).toISOString(),
+        maxPages: 1
+      });
 
-    const attributedItems = attributeMatchedKeywordsForDisplay(result.items, params.keywords);
-    const groups = groupByKeyword(attributedItems);
+      const attributedItems = attributeMatchedKeywordsForDisplay(result.items, [query]);
+      const groups = groupByKeyword(attributedItems);
 
-    for (const [keyword, items] of groups.entries()) {
-      const persist = await upsertFeedbackItems('youtube', keyword, items);
-      created += persist.created;
-      updated += persist.updated;
+      for (const [keyword, items] of groups.entries()) {
+        const persist = await upsertFeedbackItems('youtube', keyword, items);
+        created += persist.created;
+        updated += persist.updated;
 
-      const userResult = await upsertUserFeedbackItems(
-        params.userId,
-        persist.processedItems.map((item, index) => ({
-          feedbackItemId: item.id,
-          seenAt: item.seenAt,
-          matchedKeywords: items[index]?.matchedKeywords ?? []
-        }))
+        const userResult = await upsertUserFeedbackItems(
+          params.userId,
+          persist.processedItems.map((item, index) => ({
+            feedbackItemId: item.id,
+            seenAt: item.seenAt,
+            matchedKeywords: items[index]?.matchedKeywords ?? []
+          }))
+        );
+
+        userCreated += userResult.created;
+        userUpdated += userResult.updated;
+        userProcessedIds.push(...userResult.processedIds);
+      }
+
+      successCount += 1;
+      finishedAt = new Date();
+      console.log(
+        `${params.logLabel} 关键词 "${query}" 抓取 ${result.items.length} 条，入池 ${attributedItems.length} 条`
       );
-
-      userCreated += userResult.created;
-      userUpdated += userResult.updated;
-      userProcessedIds.push(...userResult.processedIds);
+    } catch (error) {
+      failCount += 1;
+      if (error instanceof YoutubeRateLimitError) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`${params.logLabel} 关键词 "${query}" 执行失败：${message}`);
     }
-
-    successCount += 1;
-    finishedAt = new Date();
-    console.log(`${params.logLabel} 抓取 ${result.items.length} 条，入池 ${attributedItems.length} 条`);
-  } catch (error) {
-    failCount += 1;
-    if (error instanceof YoutubeRateLimitError) {
-      throw error;
-    }
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`${params.logLabel} 执行失败：${message}`);
   }
 
   return {
@@ -1216,7 +1276,7 @@ function attributeMatchedKeywordsForDisplay(items: FeedbackItem[], keywords: str
 
   return items.map((item) => {
     const matchedKeywords = resolveMatchedKeywords(item, keywords);
-    const primaryKeyword = matchedKeywords[0] ?? keywords[0] ?? item.keyword;
+    const primaryKeyword = matchedKeywords[0] ?? item.keyword;
     return {
       ...item,
       keyword: primaryKeyword,
@@ -1287,6 +1347,12 @@ function buildCombinedKeywordQuery(keywords: string[]): string {
     .filter(Boolean)
     .map((keyword) => `"${keyword.replace(/"/g, '\\"')}"`)
     .join(' OR ');
+}
+
+function buildYoutubeQueries(keywords: string[]): string[] {
+  return dedupeKeywords(keywords)
+    .map((keyword) => keyword.trim())
+    .filter(Boolean);
 }
 
 function dedupeKeywords(keywords: string[]): string[] {

@@ -20,6 +20,10 @@ export type SearchConfig = {
     productName: string;
     category: string;
     coreFeatures: string[];
+    targetProducts: Array<{
+      name: string;
+      coreFeatures: string[];
+    }>;
   };
   notifyChannels: string[];
   feishuWebhook: string;
@@ -61,6 +65,10 @@ export type SearchConfigPatchPayload = {
     productName?: string;
     category?: string;
     coreFeatures?: string[];
+    targetProducts?: Array<{
+      name: string;
+      coreFeatures?: string[];
+    }>;
   };
   notifyEmail?: string;
   timezone?: string;

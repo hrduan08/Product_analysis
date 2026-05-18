@@ -46,6 +46,7 @@ export function SearchConfigPage() {
     const [productNameDraft, setProductNameDraft] = useState('');
     const [productCategoryDraft, setProductCategoryDraft] = useState('');
     const [coreFeatureInput, setCoreFeatureInput] = useState('');
+    const [productProfileLocalDirty, setProductProfileLocalDirty] = useState(false);
     const [emailDraft, setEmailDraft] = useState('');
     const [feishuDraft, setFeishuDraft] = useState('');
     const [testingFeishu, setTestingFeishu] = useState(false);
@@ -88,26 +89,27 @@ export function SearchConfigPage() {
             subtitle: '系统会按队列自动执行增量提取，不再需要手动设置每天固定时间。',
             loading: '页面加载中...',
             sectionPlatform: '1. 选择社媒平台',
-            sectionPlatformDesc: '按平台分别配置监控规则。',
+            sectionPlatformDesc: '系统会持续追踪你选择的社媒平台，发现和你设置的产品信息相匹配的热门内容。',
             sectionReddit: '2. Reddit 设置（Beta）',
             sectionYouTube: '3. YouTube 设置',
             sectionProduct: '4. 产品画像',
             sectionNotify: '5. 消息通知',
             disabledHint: '当前未启用该平台',
             betaBadge: 'Beta',
-            redditBetaAllowedHint: 'Reddit Beta 已对白名单账号开放，当前使用低频数据源过渡方案。',
+            redditBetaAllowedHint: '',
             redditBetaLockedHint: 'Reddit 仍处于 Beta 阶段，暂未对当前账号开放。',
             redditProviderDisabledHint: 'Reddit 数据源暂未启用。',
             redditCommunities: '关注社区',
             redditCommunitiesDesc: '填写 Reddit 社区 URL（最多 3 个）。',
             redditCommunityPlaceholder: '例如：https://www.reddit.com/r/AppleWatch/',
             redditKeywords: '社区内关键词筛选',
-            redditKeywordsDesc: '从社区新增内容中再做关键词匹配（最多 2 个，可不填）。',
+            redditKeywordsDesc: '请设置你关注的产品的完整名称，尽量不要缩写。例如AppleWatch、Huawei Watch GT2、Garmin Forerunner 970',
             redditKeywordPlaceholder: '例如：HuaweiWatchGT2',
             youtubeKeywords: '关键词发现',
-            youtubeKeywordsDesc: 'YouTube 关键词全站发现（低频、有限额、best effort，每天最多 1 次）。',
-            youtubeKeywordPlaceholder: '例如：Huawei Watch GT2 review',
-            productInfoDesc: '填写官网链接、电商平台链接和产品介绍后，系统会结合当前关键词自动生成目标产品范围画像，你也可以手动修改并保存。',
+            youtubeKeywordsDesc: '',
+            youtubeKeywordsHint: '请设置你关注的产品的完整名称，尽量不要缩写。例如AppleWatch、Huawei Watch GT2、Garmin Forerunner 970',
+            youtubeKeywordPlaceholder: '例如：Amazfit Active 3',
+            productInfoDesc: '填写官网链接、电商平台链接和产品介绍后，系统会结合当前关键词自动生成产品画像，并自动覆盖你在 YouTube 和 Reddit 中设置的产品关键词。',
             productWebsite: '官网链接',
             productCommerce: '电商平台链接',
             productDescription: '产品介绍',
@@ -116,8 +118,10 @@ export function SearchConfigPage() {
             productProfileBrand: '品牌',
             productProfileName: '产品名',
             productProfileCategory: '类别',
+            productProfileTargets: '目标产品范围',
             productProfileCoreFeatures: '核心特征',
             productProfileGeneratedAt: '最近生成时间：',
+            emptyTargetProducts: '暂无目标产品',
             addFeature: '添加特征',
             emptyFeatures: '暂无核心特征',
             saveProductSources: '保存并生成画像',
@@ -132,7 +136,7 @@ export function SearchConfigPage() {
             toastProductProfileSaved: '产品画像已保存',
             addCommunity: '添加社区',
             addKeyword: '添加关键词',
-            notifyDesc: '不管选择 Reddit 或 YouTube，都统一在这里配置通知方式。',
+            notifyDesc: '',
             notifyEmail: '邮件通知',
             notifyEmailPlaceholder: 'name@example.com',
             notifyFeishu: '飞书通知',
@@ -173,26 +177,27 @@ export function SearchConfigPage() {
             subtitle: 'We run incremental monitoring with an automatic queue. No fixed daily time is needed.',
             loading: 'Loading...',
             sectionPlatform: '1. Choose platforms',
-            sectionPlatformDesc: 'Configure rules by platform.',
+            sectionPlatformDesc: 'We continuously track the social platforms you choose and surface popular content that matches your product information.',
             sectionReddit: '2. Reddit settings (Beta)',
             sectionYouTube: '3. YouTube settings',
             sectionProduct: '4. Product profile',
             sectionNotify: '5. Notifications',
             disabledHint: 'This platform is not enabled',
             betaBadge: 'Beta',
-            redditBetaAllowedHint: 'Reddit Beta is enabled for allowlisted accounts and currently uses a low-frequency transitional source.',
+            redditBetaAllowedHint: '',
             redditBetaLockedHint: 'Reddit is still in Beta and is not open to this account yet.',
             redditProviderDisabledHint: 'Reddit data source is not enabled.',
             redditCommunities: 'Communities',
             redditCommunitiesDesc: 'Add Reddit community URLs (up to 3).',
             redditCommunityPlaceholder: 'e.g. https://www.reddit.com/r/AppleWatch/',
             redditKeywords: 'In-source keyword filter',
-            redditKeywordsDesc: 'Match keywords from community incremental content (up to 2, optional).',
+            redditKeywordsDesc: 'Use the full product name you care about and avoid abbreviations whenever possible. Examples: AppleWatch, Huawei Watch GT2, Garmin Forerunner 970.',
             redditKeywordPlaceholder: 'e.g. HuaweiWatchGT2',
             youtubeKeywords: 'Keyword discovery',
-            youtubeKeywordsDesc: 'YouTube global keyword discovery (low-frequency, budgeted, best effort, max once/day).',
-            youtubeKeywordPlaceholder: 'e.g. Huawei Watch GT2 review',
-            productInfoDesc: 'Add product links or description. We will auto-generate a product profile focused on the target product scope implied by your keywords, and you can edit it before saving.',
+            youtubeKeywordsDesc: '',
+            youtubeKeywordsHint: 'Use the full product name you care about and avoid abbreviations whenever possible. Examples: AppleWatch, Huawei Watch GT2, Garmin Forerunner 970.',
+            youtubeKeywordPlaceholder: 'e.g. Amazfit Active 3',
+            productInfoDesc: 'Add product links or description. We will auto-generate a product profile and automatically cover the product keywords you configured for YouTube and Reddit.',
             productWebsite: 'Official website URL',
             productCommerce: 'Commerce URL',
             productDescription: 'Product description',
@@ -201,8 +206,10 @@ export function SearchConfigPage() {
             productProfileBrand: 'Brand',
             productProfileName: 'Product name',
             productProfileCategory: 'Category',
+            productProfileTargets: 'Target products',
             productProfileCoreFeatures: 'Core features',
             productProfileGeneratedAt: 'Last generated: ',
+            emptyTargetProducts: 'No target products yet',
             addFeature: 'Add feature',
             emptyFeatures: 'No core features yet',
             saveProductSources: 'Save & generate profile',
@@ -217,7 +224,7 @@ export function SearchConfigPage() {
             toastProductProfileSaved: 'Product profile saved',
             addCommunity: 'Add community',
             addKeyword: 'Add keyword',
-            notifyDesc: 'Notification settings are shared by Reddit and YouTube.',
+            notifyDesc: '',
             notifyEmail: 'Email',
             notifyEmailPlaceholder: 'name@example.com',
             notifyFeishu: 'Feishu',
@@ -289,6 +296,7 @@ export function SearchConfigPage() {
                 setProductBrandDraft(response.config.productProfile.brand ?? '');
                 setProductNameDraft(response.config.productProfile.productName ?? '');
                 setProductCategoryDraft(response.config.productProfile.category ?? '');
+                setProductProfileLocalDirty(false);
             }
             catch (error) {
                 if (!cancelled) {
@@ -388,6 +396,9 @@ export function SearchConfigPage() {
             setProductBrandDraft(updated.productProfile.brand ?? '');
             setProductNameDraft(updated.productProfile.productName ?? '');
             setProductCategoryDraft(updated.productProfile.category ?? '');
+            if ('productProfile' in requestPayload) {
+                setProductProfileLocalDirty(false);
+            }
             if ('feishuWebhook' in requestPayload) {
                 setFeishuDraft(updated.feishuWebhook ?? '');
             }
@@ -403,6 +414,9 @@ export function SearchConfigPage() {
             setProductBrandDraft(previous.productProfile.brand ?? '');
             setProductNameDraft(previous.productProfile.productName ?? '');
             setProductCategoryDraft(previous.productProfile.category ?? '');
+            if ('productProfile' in requestPayload) {
+                setProductProfileLocalDirty(false);
+            }
             showToast(error instanceof Error ? error.message : TEXT.toastUpdateFail, 'error');
         }
         finally {
@@ -567,6 +581,7 @@ export function SearchConfigPage() {
                 coreFeatures: [...config.productProfile.coreFeatures, value]
             }
         });
+        setProductProfileLocalDirty(true);
         setCoreFeatureInput('');
     };
     const handleRemoveCoreFeature = (feature) => {
@@ -579,6 +594,7 @@ export function SearchConfigPage() {
                 coreFeatures: config.productProfile.coreFeatures.filter((item) => item !== feature)
             }
         });
+        setProductProfileLocalDirty(true);
     };
     const handleSaveProductProfile = async () => {
         if (!config)
@@ -587,7 +603,8 @@ export function SearchConfigPage() {
             brand: productBrandDraft.trim(),
             productName: productNameDraft.trim(),
             category: productCategoryDraft.trim(),
-            coreFeatures: config.productProfile.coreFeatures
+            coreFeatures: config.productProfile.coreFeatures,
+            targetProducts: config.productProfile.targetProducts
         };
         await applyPatch({
             productProfile: {
@@ -776,7 +793,8 @@ export function SearchConfigPage() {
         productDescriptionDraft.trim() !== (config.productDescription?.trim() ?? '');
     const productProfileDirty = productBrandDraft.trim() !== (config.productProfile.brand?.trim() ?? '') ||
         productNameDraft.trim() !== (config.productProfile.productName?.trim() ?? '') ||
-        productCategoryDraft.trim() !== (config.productProfile.category?.trim() ?? '');
+        productCategoryDraft.trim() !== (config.productProfile.category?.trim() ?? '') ||
+        productProfileLocalDirty;
     const productProfileStatusLabel = config.productProfile.updatedByUser
         ? TEXT.productStatusManual
         : config.productProfile.status === 'pending'
@@ -791,15 +809,11 @@ export function SearchConfigPage() {
         : lang === 'zh'
             ? '尚未生成'
             : 'Not generated';
-    return (_jsxs(_Fragment, { children: [_jsxs("div", { className: "dashboard", children: [AccountNav, _jsxs("div", { className: "dashboard-shell config-page", children: [_jsxs("header", { className: "config-header", children: [_jsxs("div", { children: [_jsx("h1", { children: TEXT.title }), _jsx("p", { children: TEXT.subtitle })] }), _jsx(Link, { to: "/app", className: "config-link", children: lang === 'zh' ? '返回控制台' : 'Back to dashboard' })] }), _jsxs("section", { className: "config-section", children: [_jsx("h3", { children: TEXT.sectionPlatform }), _jsx("p", { className: "config-section__hint", children: TEXT.sectionPlatformDesc }), _jsx("div", { className: "platform-toggle", children: PLATFORM_OPTIONS.map((option) => {
+    return (_jsxs(_Fragment, { children: [_jsxs("div", { className: "dashboard", children: [AccountNav, _jsxs("div", { className: "dashboard-shell config-page", children: [_jsxs("header", { className: "config-header", children: [_jsxs("div", { children: [_jsx("h1", { children: TEXT.title }), _jsx("p", { children: TEXT.subtitle })] }), _jsx(Link, { to: "/app", className: "config-link", children: lang === 'zh' ? '返回控制台' : 'Back to dashboard' })] }), _jsxs("section", { className: "config-section", children: [_jsx("h3", { children: TEXT.sectionPlatform }), TEXT.sectionPlatformDesc ? _jsx("p", { className: "config-section__hint", children: TEXT.sectionPlatformDesc }) : null, _jsx("div", { className: "platform-toggle", children: PLATFORM_OPTIONS.map((option) => {
                                             const isReddit = option.value === 'reddit';
                                             const locked = isReddit && !canConfigureReddit;
                                             return (_jsx("button", { type: "button", className: `platform-option ${config.platforms.includes(option.value) ? 'active' : ''}`, onClick: () => void handlePlatformToggle(option.value), disabled: saving || locked, title: locked ? (redditProviderEnabled ? TEXT.redditBetaLockedHint : TEXT.redditProviderDisabledHint) : undefined, children: _jsxs("span", { className: "platform-option__content", children: [option.label, isReddit ? _jsx("span", { className: "platform-option__badge", children: TEXT.betaBadge }) : null] }) }, option.value));
-                                        }) }), _jsx("p", { className: "config-section__hint", children: !redditProviderEnabled
-                                            ? TEXT.redditProviderDisabledHint
-                                            : redditBetaAllowed
-                                                ? TEXT.redditBetaAllowedHint
-                                                : TEXT.redditBetaLockedHint })] }), _jsxs("section", { className: "config-section", children: [_jsxs("div", { className: "config-section__header", children: [_jsx("h3", { children: TEXT.sectionReddit }), _jsx("span", { className: "config-section__hint", children: `Max ${maxRedditCommunities} communities / ${maxRedditKeywords} keywords` })] }), !canConfigureReddit ? (_jsx("p", { className: "config-section__hint", children: redditProviderEnabled ? TEXT.redditBetaLockedHint : TEXT.redditProviderDisabledHint })) : !config.platforms.includes('reddit') ? (_jsx("p", { className: "config-section__hint", children: TEXT.disabledHint })) : (_jsxs(_Fragment, { children: [_jsx("p", { className: "config-section__hint", children: TEXT.redditCommunitiesDesc }), _jsxs("div", { className: "config-chip-list", children: [config.redditCommunities.map((community) => (_jsxs("span", { className: "config-chip", children: [community, _jsx("button", { type: "button", className: "config-chip__remove", onClick: () => void handleRemoveRedditCommunity(community), disabled: saving, children: "\u00D7" })] }, community))), config.redditCommunities.length === 0 ? (_jsx("span", { className: "config-empty", children: TEXT.emptyCommunities })) : null] }), _jsxs("form", { className: "config-inline-form", onSubmit: (event) => void handleAddRedditCommunity(event), children: [_jsx("input", { type: "text", value: redditCommunityInput, onChange: (event) => setRedditCommunityInput(event.target.value), placeholder: TEXT.redditCommunityPlaceholder, disabled: saving }), _jsx("button", { type: "submit", disabled: saving || config.redditCommunities.length >= maxRedditCommunities, children: TEXT.addCommunity })] }), _jsx("p", { className: "config-section__hint", children: TEXT.redditKeywordsDesc }), _jsxs("div", { className: "config-chip-list", children: [config.redditKeywords.map((keyword) => (_jsxs("span", { className: "config-chip", children: [keyword, _jsx("button", { type: "button", className: "config-chip__remove", onClick: () => void handleRemoveRedditKeyword(keyword), disabled: saving, children: "\u00D7" })] }, keyword))), config.redditKeywords.length === 0 ? (_jsx("span", { className: "config-empty", children: TEXT.emptyKeywords })) : null] }), _jsxs("form", { className: "config-inline-form", onSubmit: (event) => void handleAddRedditKeyword(event), children: [_jsx("input", { type: "text", value: redditKeywordInput, onChange: (event) => setRedditKeywordInput(event.target.value), placeholder: TEXT.redditKeywordPlaceholder, disabled: saving }), _jsx("button", { type: "submit", disabled: saving || config.redditKeywords.length >= maxRedditKeywords, children: TEXT.addKeyword })] })] }))] }), _jsxs("section", { className: "config-section", children: [_jsxs("div", { className: "config-section__header", children: [_jsx("h3", { children: TEXT.sectionYouTube }), _jsx("span", { className: "config-section__hint", children: `Max ${maxYoutubeKeywords} keywords` })] }), !config.platforms.includes('youtube') ? (_jsx("p", { className: "config-section__hint", children: TEXT.disabledHint })) : (_jsxs(_Fragment, { children: [_jsx("p", { className: "config-section__hint", children: TEXT.youtubeKeywordsDesc }), _jsxs("div", { className: "config-chip-list", children: [config.youtubeKeywords.map((keyword) => (_jsxs("span", { className: "config-chip", children: [keyword, _jsx("button", { type: "button", className: "config-chip__remove", onClick: () => void handleRemoveYoutubeKeyword(keyword), disabled: saving, children: "\u00D7" })] }, keyword))), config.youtubeKeywords.length === 0 ? (_jsx("span", { className: "config-empty", children: TEXT.emptyKeywords })) : null] }), _jsxs("form", { className: "config-inline-form", onSubmit: (event) => void handleAddYoutubeKeyword(event), children: [_jsx("input", { type: "text", value: youtubeKeywordInput, onChange: (event) => setYoutubeKeywordInput(event.target.value), placeholder: TEXT.youtubeKeywordPlaceholder, disabled: saving }), _jsx("button", { type: "submit", disabled: saving || config.youtubeKeywords.length >= maxYoutubeKeywords, children: TEXT.addKeyword })] })] }))] }), _jsxs("section", { className: "config-section", children: [_jsx("h3", { children: TEXT.sectionProduct }), _jsx("p", { className: "config-section__hint", children: TEXT.productInfoDesc }), _jsx("div", { className: "config-inline-form config-inline-form--single", children: _jsx("input", { type: "url", value: productWebsiteDraft, onChange: (event) => setProductWebsiteDraft(event.target.value), placeholder: TEXT.productWebsite, disabled: saving }) }), _jsx("div", { className: "config-inline-form config-inline-form--single", children: _jsx("input", { type: "url", value: productCommerceDraft, onChange: (event) => setProductCommerceDraft(event.target.value), placeholder: TEXT.productCommerce, disabled: saving }) }), _jsx("div", { className: "config-inline-form config-inline-form--single", children: _jsx("textarea", { value: productDescriptionDraft, onChange: (event) => setProductDescriptionDraft(event.target.value), placeholder: TEXT.productDescriptionPlaceholder, disabled: saving, rows: 4 }) }), _jsx("div", { className: "config-inline-form config-inline-form--single", children: _jsx("button", { type: "button", onClick: () => void handleProductSourceSubmit(), disabled: saving || !productSourceDirty, children: TEXT.saveProductSources }) }), _jsxs("p", { className: "config-section__hint", children: [TEXT.productProfileStatus, productProfileStatusLabel, " \u00B7 ", TEXT.productProfileGeneratedAt, productGeneratedAtDisplay] }), config.productProfile.error ? (_jsx("p", { className: "config-section__hint", style: { color: '#d14343' }, children: config.productProfile.error })) : null, _jsx("div", { className: "config-inline-form config-inline-form--single", children: _jsx("input", { type: "text", value: productBrandDraft, onChange: (event) => setProductBrandDraft(event.target.value), placeholder: TEXT.productProfileBrand, disabled: saving }) }), _jsx("div", { className: "config-inline-form config-inline-form--single", children: _jsx("input", { type: "text", value: productNameDraft, onChange: (event) => setProductNameDraft(event.target.value), placeholder: TEXT.productProfileName, disabled: saving }) }), _jsx("div", { className: "config-inline-form config-inline-form--single", children: _jsx("input", { type: "text", value: productCategoryDraft, onChange: (event) => setProductCategoryDraft(event.target.value), placeholder: TEXT.productProfileCategory, disabled: saving }) }), _jsx("p", { className: "config-section__hint", children: TEXT.productProfileCoreFeatures }), _jsxs("div", { className: "config-chip-list", children: [config.productProfile.coreFeatures.map((feature) => (_jsxs("span", { className: "config-chip", children: [feature, _jsx("button", { type: "button", className: "config-chip__remove", onClick: () => handleRemoveCoreFeature(feature), disabled: saving, children: "\u00D7" })] }, feature))), config.productProfile.coreFeatures.length === 0 ? (_jsx("span", { className: "config-empty", children: TEXT.emptyFeatures })) : null] }), _jsxs("div", { className: "config-inline-form", children: [_jsx("input", { type: "text", value: coreFeatureInput, onChange: (event) => setCoreFeatureInput(event.target.value), placeholder: TEXT.productProfileCoreFeatures, disabled: saving }), _jsx("button", { type: "button", onClick: handleAddCoreFeature, disabled: saving, children: TEXT.addFeature })] }), _jsx("div", { className: "config-inline-form config-inline-form--single", children: _jsx("button", { type: "button", onClick: () => void handleSaveProductProfile(), disabled: saving || !productProfileDirty, children: TEXT.saveProductProfile }) })] }), _jsxs("section", { className: "config-section", children: [_jsx("h3", { children: TEXT.sectionNotify }), _jsx("p", { className: "config-section__hint", children: TEXT.notifyDesc }), _jsx("div", { className: "platform-toggle", children: CHANNEL_ORDER.map((channel) => (_jsx("button", { type: "button", className: `platform-option ${config.notifyChannels.includes(channel) ? 'active' : ''}`, onClick: () => void handleChannelToggle(channel), disabled: saving, children: channel === 'email' ? TEXT.notifyEmail : TEXT.notifyFeishu }, channel))) }), feishuEnabled ? (_jsxs(_Fragment, { children: [_jsxs("p", { className: "config-section__hint", children: [TEXT.feishuSteps, _jsx("br", {}), TEXT.feishuStep1, _jsx("br", {}), TEXT.feishuStep2, _jsx("br", {}), TEXT.feishuStep3, _jsx("br", {}), TEXT.feishuStep4] }), _jsx("p", { className: "config-section__hint config-section__hint--tight", children: TEXT.feishuNotice }), _jsxs("div", { className: "config-inline-form", children: [_jsx("input", { type: "url", value: feishuDraft, onChange: (event) => setFeishuDraft(event.target.value), placeholder: TEXT.feishuPlaceholder, disabled: saving }), _jsx("button", { type: "button", onClick: () => void handleFeishuSubmit(), disabled: saving || !feishuWebhookDirty, children: TEXT.btnSave }), _jsx("button", { type: "button", onClick: () => void handleFeishuTest(), disabled: saving || testingFeishu || !config.feishuWebhook, children: testingFeishu ? (lang === 'zh' ? '测试中…' : 'Testing...') : TEXT.btnTestFeishu })] }), _jsxs("p", { className: "config-section__hint", children: [TEXT.labelFeishuStatus, feishuStatusLabel, " \u00B7 ", feishuLastTestDisplay] })] })) : null, emailEnabled ? (_jsxs(_Fragment, { children: [_jsx("p", { className: "config-section__hint", children: lang === 'zh'
+                                        }) }), !redditProviderEnabled ? (_jsx("p", { className: "config-section__hint", children: TEXT.redditProviderDisabledHint })) : redditBetaAllowed ? (TEXT.redditBetaAllowedHint ? _jsx("p", { className: "config-section__hint", children: TEXT.redditBetaAllowedHint }) : null) : (_jsx("p", { className: "config-section__hint", children: TEXT.redditBetaLockedHint }))] }), _jsxs("section", { className: "config-section", children: [_jsxs("div", { className: "config-section__header", children: [_jsx("h3", { children: TEXT.sectionReddit }), _jsx("span", { className: "config-section__hint", children: `Max ${maxRedditCommunities} communities / ${maxRedditKeywords} keywords` })] }), !canConfigureReddit ? (_jsx("p", { className: "config-section__hint", children: redditProviderEnabled ? TEXT.redditBetaLockedHint : TEXT.redditProviderDisabledHint })) : !config.platforms.includes('reddit') ? (_jsx("p", { className: "config-section__hint", children: TEXT.disabledHint })) : (_jsxs(_Fragment, { children: [_jsx("p", { className: "config-section__hint", children: TEXT.redditCommunitiesDesc }), _jsxs("div", { className: "config-chip-list", children: [config.redditCommunities.map((community) => (_jsxs("span", { className: "config-chip", children: [community, _jsx("button", { type: "button", className: "config-chip__remove", onClick: () => void handleRemoveRedditCommunity(community), disabled: saving, children: "\u00D7" })] }, community))), config.redditCommunities.length === 0 ? (_jsx("span", { className: "config-empty", children: TEXT.emptyCommunities })) : null] }), _jsxs("form", { className: "config-inline-form", onSubmit: (event) => void handleAddRedditCommunity(event), children: [_jsx("input", { type: "text", value: redditCommunityInput, onChange: (event) => setRedditCommunityInput(event.target.value), placeholder: TEXT.redditCommunityPlaceholder, disabled: saving }), _jsx("button", { type: "submit", disabled: saving || config.redditCommunities.length >= maxRedditCommunities, children: TEXT.addCommunity })] }), TEXT.redditKeywordsDesc ? _jsx("p", { className: "config-section__hint", children: TEXT.redditKeywordsDesc }) : null, _jsxs("div", { className: "config-chip-list", children: [config.redditKeywords.map((keyword) => (_jsxs("span", { className: "config-chip", children: [keyword, _jsx("button", { type: "button", className: "config-chip__remove", onClick: () => void handleRemoveRedditKeyword(keyword), disabled: saving, children: "\u00D7" })] }, keyword))), config.redditKeywords.length === 0 ? (_jsx("span", { className: "config-empty", children: TEXT.emptyKeywords })) : null] }), _jsxs("form", { className: "config-inline-form", onSubmit: (event) => void handleAddRedditKeyword(event), children: [_jsx("input", { type: "text", value: redditKeywordInput, onChange: (event) => setRedditKeywordInput(event.target.value), placeholder: TEXT.redditKeywordPlaceholder, disabled: saving }), _jsx("button", { type: "submit", disabled: saving || config.redditKeywords.length >= maxRedditKeywords, children: TEXT.addKeyword })] })] }))] }), _jsxs("section", { className: "config-section", children: [_jsxs("div", { className: "config-section__header", children: [_jsx("h3", { children: TEXT.sectionYouTube }), _jsx("span", { className: "config-section__hint", children: `Max ${maxYoutubeKeywords} keywords` })] }), !config.platforms.includes('youtube') ? (_jsx("p", { className: "config-section__hint", children: TEXT.disabledHint })) : (_jsxs(_Fragment, { children: [TEXT.youtubeKeywordsDesc ? _jsx("p", { className: "config-section__hint", children: TEXT.youtubeKeywordsDesc }) : null, TEXT.youtubeKeywordsHint ? _jsx("p", { className: "config-section__hint", children: TEXT.youtubeKeywordsHint }) : null, _jsxs("div", { className: "config-chip-list", children: [config.youtubeKeywords.map((keyword) => (_jsxs("span", { className: "config-chip", children: [keyword, _jsx("button", { type: "button", className: "config-chip__remove", onClick: () => void handleRemoveYoutubeKeyword(keyword), disabled: saving, children: "\u00D7" })] }, keyword))), config.youtubeKeywords.length === 0 ? (_jsx("span", { className: "config-empty", children: TEXT.emptyKeywords })) : null] }), _jsxs("form", { className: "config-inline-form", onSubmit: (event) => void handleAddYoutubeKeyword(event), children: [_jsx("input", { type: "text", value: youtubeKeywordInput, onChange: (event) => setYoutubeKeywordInput(event.target.value), placeholder: TEXT.youtubeKeywordPlaceholder, disabled: saving }), _jsx("button", { type: "submit", disabled: saving || config.youtubeKeywords.length >= maxYoutubeKeywords, children: TEXT.addKeyword })] })] }))] }), _jsxs("section", { className: "config-section", children: [_jsx("h3", { children: TEXT.sectionProduct }), _jsx("p", { className: "config-section__hint", children: TEXT.productInfoDesc }), _jsx("div", { className: "config-inline-form config-inline-form--single", children: _jsx("input", { type: "url", value: productWebsiteDraft, onChange: (event) => setProductWebsiteDraft(event.target.value), placeholder: TEXT.productWebsite, disabled: saving }) }), _jsx("div", { className: "config-inline-form config-inline-form--single", children: _jsx("input", { type: "url", value: productCommerceDraft, onChange: (event) => setProductCommerceDraft(event.target.value), placeholder: TEXT.productCommerce, disabled: saving }) }), _jsx("div", { className: "config-inline-form config-inline-form--single", children: _jsx("textarea", { value: productDescriptionDraft, onChange: (event) => setProductDescriptionDraft(event.target.value), placeholder: TEXT.productDescriptionPlaceholder, disabled: saving, rows: 4 }) }), _jsx("div", { className: "config-inline-form config-inline-form--single", children: _jsx("button", { type: "button", onClick: () => void handleProductSourceSubmit(), disabled: saving || !productSourceDirty, children: TEXT.saveProductSources }) }), _jsxs("p", { className: "config-section__hint", children: [TEXT.productProfileStatus, productProfileStatusLabel, " \u00B7 ", TEXT.productProfileGeneratedAt, productGeneratedAtDisplay] }), config.productProfile.error ? (_jsx("p", { className: "config-section__hint", style: { color: '#d14343' }, children: config.productProfile.error })) : null, _jsx("div", { className: "config-inline-form config-inline-form--single", children: _jsx("input", { type: "text", value: productBrandDraft, onChange: (event) => setProductBrandDraft(event.target.value), placeholder: TEXT.productProfileBrand, disabled: saving }) }), _jsx("div", { className: "config-inline-form config-inline-form--single", children: _jsx("input", { type: "text", value: productNameDraft, onChange: (event) => setProductNameDraft(event.target.value), placeholder: TEXT.productProfileName, disabled: saving }) }), _jsx("div", { className: "config-inline-form config-inline-form--single", children: _jsx("input", { type: "text", value: productCategoryDraft, onChange: (event) => setProductCategoryDraft(event.target.value), placeholder: TEXT.productProfileCategory, disabled: saving }) }), _jsx("p", { className: "config-section__hint", children: TEXT.productProfileTargets }), _jsxs("div", { className: "config-chip-list", children: [config.productProfile.targetProducts.map((target) => (_jsx("span", { className: "config-chip", children: target.name }, target.name))), config.productProfile.targetProducts.length === 0 ? (_jsx("span", { className: "config-empty", children: TEXT.emptyTargetProducts })) : null] }), _jsx("p", { className: "config-section__hint", children: TEXT.productProfileCoreFeatures }), _jsxs("div", { className: "config-chip-list", children: [config.productProfile.coreFeatures.map((feature) => (_jsxs("span", { className: "config-chip", children: [feature, _jsx("button", { type: "button", className: "config-chip__remove", onClick: () => handleRemoveCoreFeature(feature), disabled: saving, children: "\u00D7" })] }, feature))), config.productProfile.coreFeatures.length === 0 ? (_jsx("span", { className: "config-empty", children: TEXT.emptyFeatures })) : null] }), _jsxs("div", { className: "config-inline-form", children: [_jsx("input", { type: "text", value: coreFeatureInput, onChange: (event) => setCoreFeatureInput(event.target.value), placeholder: TEXT.productProfileCoreFeatures, disabled: saving }), _jsx("button", { type: "button", onClick: handleAddCoreFeature, disabled: saving, children: TEXT.addFeature })] }), _jsx("div", { className: "config-inline-form config-inline-form--single", children: _jsx("button", { type: "button", onClick: () => void handleSaveProductProfile(), disabled: saving || !productProfileDirty, children: TEXT.saveProductProfile }) })] }), _jsxs("section", { className: "config-section", children: [_jsx("h3", { children: TEXT.sectionNotify }), TEXT.notifyDesc ? _jsx("p", { className: "config-section__hint", children: TEXT.notifyDesc }) : null, _jsx("div", { className: "platform-toggle", children: CHANNEL_ORDER.map((channel) => (_jsx("button", { type: "button", className: `platform-option ${config.notifyChannels.includes(channel) ? 'active' : ''}`, onClick: () => void handleChannelToggle(channel), disabled: saving, children: channel === 'email' ? TEXT.notifyEmail : TEXT.notifyFeishu }, channel))) }), feishuEnabled ? (_jsxs(_Fragment, { children: [_jsxs("p", { className: "config-section__hint", children: [TEXT.feishuSteps, _jsx("br", {}), TEXT.feishuStep1, _jsx("br", {}), TEXT.feishuStep2, _jsx("br", {}), TEXT.feishuStep3, _jsx("br", {}), TEXT.feishuStep4] }), _jsx("p", { className: "config-section__hint config-section__hint--tight", children: TEXT.feishuNotice }), _jsxs("div", { className: "config-inline-form", children: [_jsx("input", { type: "url", value: feishuDraft, onChange: (event) => setFeishuDraft(event.target.value), placeholder: TEXT.feishuPlaceholder, disabled: saving }), _jsx("button", { type: "button", onClick: () => void handleFeishuSubmit(), disabled: saving || !feishuWebhookDirty, children: TEXT.btnSave }), _jsx("button", { type: "button", onClick: () => void handleFeishuTest(), disabled: saving || testingFeishu || !config.feishuWebhook, children: testingFeishu ? (lang === 'zh' ? '测试中…' : 'Testing...') : TEXT.btnTestFeishu })] }), _jsxs("p", { className: "config-section__hint", children: [TEXT.labelFeishuStatus, feishuStatusLabel, " \u00B7 ", feishuLastTestDisplay] })] })) : null, emailEnabled ? (_jsxs(_Fragment, { children: [_jsx("p", { className: "config-section__hint", children: lang === 'zh'
                                                     ? '邮件通知将发送到以下邮箱，可修改为其他地址。'
                                                     : 'Email notifications will be sent to the address below.' }), _jsxs("div", { className: "config-inline-form config-inline-form--single", children: [_jsx("input", { type: "email", value: emailDraft, onChange: (event) => setEmailDraft(event.target.value), onBlur: () => void handleEmailSubmit(), placeholder: TEXT.notifyEmailPlaceholder, disabled: saving }), _jsx("button", { type: "button", onClick: () => void handleEmailSubmit(), disabled: saving || emailDraft.trim() === config.notifyEmail.trim(), children: TEXT.btnSave })] })] })) : null] }), toast ? (_jsx("div", { className: "toast-container", children: _jsx(Toast, { message: toast.message, type: toast.type, onClose: () => setToast(null) }) })) : null] })] }), adminModalOpen ? (_jsx("div", { className: "admin-password-modal", children: _jsxs("form", { className: "admin-password-card", onSubmit: handleAdminPasswordSubmit, children: [_jsx("h3", { children: lang === 'zh' ? '输入管理员密码' : 'Enter admin password' }), _jsx("p", { className: "plan-meta", children: lang === 'zh' ? '完成验证后将进入管理平台。' : 'After verification you will enter admin console.' }), _jsx("input", { type: "password", value: adminPasswordInput, onChange: (event) => setAdminPasswordInput(event.target.value), placeholder: lang === 'zh' ? '管理员密码' : 'Admin password', autoFocus: true }), adminPasswordError ? _jsx("div", { className: "subscription-error", children: adminPasswordError }) : null, _jsxs("div", { className: "admin-password-card__actions", children: [_jsx("button", { type: "button", className: "btn secondary", onClick: () => setAdminModalOpen(false), children: lang === 'zh' ? '取消' : 'Cancel' }), _jsx("button", { type: "submit", className: "btn primary", children: lang === 'zh' ? '确定' : 'Confirm' })] })] }) })) : null] }));
 }

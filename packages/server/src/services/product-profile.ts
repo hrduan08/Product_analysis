@@ -1,3 +1,4 @@
+import { Prisma } from '../generated/prisma/client.js';
 import { prisma } from '../db/prisma.js';
 
 const CLOUDFLARE_ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID?.trim() ?? '';
@@ -13,6 +14,12 @@ export type ProductProfile = {
   brand: string;
   productName: string;
   category: string;
+  coreFeatures: string[];
+  targetProducts: ProductTarget[];
+};
+
+export type ProductTarget = {
+  name: string;
   coreFeatures: string[];
 };
 
@@ -46,7 +53,8 @@ export async function generateAndPersistProductProfile(userId: string) {
       product_profile_brand: true,
       product_profile_product_name: true,
       product_profile_category: true,
-      product_profile_core_features: true
+      product_profile_core_features: true,
+      product_profile_targets: true
     }
   });
 
@@ -62,12 +70,16 @@ export async function generateAndPersistProductProfile(userId: string) {
       targetKeywords: [...(config.youtube_keywords ?? []), ...(config.reddit_keywords ?? [])]
     });
 
-    const profile = mergeGeneratedProfileWithExisting(generatedProfile, {
+    const profile = ensureTargetProductsCoverKeywords(
+      mergeGeneratedProfileWithExisting(generatedProfile, {
       brand: config.product_profile_brand ?? '',
       productName: config.product_profile_product_name ?? '',
       category: config.product_profile_category ?? '',
-      coreFeatures: config.product_profile_core_features ?? []
-    });
+      coreFeatures: config.product_profile_core_features ?? [],
+      targetProducts: normalizeTargetProducts(config.product_profile_targets)
+      }),
+      [...(config.youtube_keywords ?? []), ...(config.reddit_keywords ?? [])]
+    );
 
     return prisma.userSearchConfig.update({
       where: { user_id: userId },
@@ -80,6 +92,8 @@ export async function generateAndPersistProductProfile(userId: string) {
         product_profile_product_name: profile.productName || null,
         product_profile_category: profile.category || null,
         product_profile_core_features: profile.coreFeatures,
+        product_profile_targets:
+          profile.targetProducts.length > 0 ? profile.targetProducts : Prisma.JsonNull,
         product_profile_competitors: []
       }
     });
@@ -100,14 +114,24 @@ function mergeGeneratedProfileWithExisting(
   generated: ProductProfile,
   existing: Partial<ProductProfile>
 ): ProductProfile {
+  const targetProducts =
+    generated.targetProducts.length > 0
+      ? generated.targetProducts
+      : normalizeTargetProducts(existing.targetProducts);
+  const productName =
+    generated.productName ||
+    existing.productName?.trim() ||
+    summarizeTargetProducts(targetProducts);
+
   return {
     brand: generated.brand || existing.brand?.trim() || '',
-    productName: generated.productName || existing.productName?.trim() || '',
+    productName,
     category: generated.category || existing.category?.trim() || '',
     coreFeatures:
       generated.coreFeatures.length > 0
         ? generated.coreFeatures
-        : normalizeStringArray(existing.coreFeatures)
+        : normalizeStringArray(existing.coreFeatures),
+    targetProducts
   };
 }
 
@@ -161,7 +185,7 @@ export async function generateProductProfile(input: {
           {
             role: 'system',
             content:
-              'You extract structured product profiles. Return JSON only. Do not add explanations, markdown, or extra text. The JSON schema is: {"brand":"string","product_name":"string","category":"string","core_features":["string"]}. Focus on the target product scope that is relevant to the provided keywords, not the entire brand catalog. If the inputs include both a brand home page and more specific product details, prioritize the products implied by the keywords and specific product details. Keep values short and concrete. Do not invent competitors or include same-brand sibling products.'
+              'You extract structured product profiles. Return JSON only. Do not add explanations, markdown, or extra text. The JSON schema is: {"brand":"string","product_name":"string","category":"string","core_features":["string"],"target_products":[{"name":"string","core_features":["string"]}]}. Focus on the target product scope that is relevant to the provided keywords, not the entire brand catalog. You must cover the products implied by the provided keywords in target_products. If the inputs include both a brand home page and more specific product details, prioritize the products implied by the keywords and specific product details. Keep values short and concrete. Do not invent competitors or include same-brand sibling products.'
           },
           {
             role: 'user',
@@ -198,7 +222,8 @@ export function hasUsableProductProfile(profile: Partial<ProductProfile> | null 
       profile.brand?.trim() ||
       profile.productName?.trim() ||
       profile.category?.trim() ||
-      profile.coreFeatures?.some((item) => item.trim())
+      profile.coreFeatures?.some((item) => item.trim()) ||
+      normalizeTargetProducts(profile.targetProducts).length > 0
   );
 }
 
@@ -212,6 +237,15 @@ export function buildProductProfileSummary(
     profile.category?.trim() ? `Category: ${profile.category.trim()}` : '',
     profile.coreFeatures && profile.coreFeatures.length > 0
       ? `Core features: ${normalizeStringArray(profile.coreFeatures).join(', ')}`
+      : '',
+    normalizeTargetProducts(profile.targetProducts).length > 0
+      ? `Target products:\n${normalizeTargetProducts(profile.targetProducts)
+          .map((target) =>
+            target.coreFeatures.length > 0
+              ? `- ${target.name}: ${target.coreFeatures.join(', ')}`
+              : `- ${target.name}`
+          )
+          .join('\n')}`
       : '',
     options.targetKeywords && options.targetKeywords.length > 0
       ? `Target keywords: ${normalizeStringArray(options.targetKeywords).join(', ')}`
@@ -285,7 +319,8 @@ export function parseProductProfileResponse(raw: string): ProductProfile {
     brand: normalizeTextField(parsed.brand),
     productName: normalizeTextField(parsed.product_name),
     category: normalizeTextField(parsed.category),
-    coreFeatures: normalizeStringArray(parsed.core_features)
+    coreFeatures: normalizeStringArray(parsed.core_features),
+    targetProducts: normalizeTargetProducts(parsed.target_products)
   };
 }
 
@@ -329,6 +364,89 @@ function normalizeStringArray(value: unknown): string[] {
   }
   return result;
 }
+
+export function normalizeTargetProducts(value: unknown): ProductTarget[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const result: ProductTarget[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') {
+      continue;
+    }
+    const record = item as Record<string, unknown>;
+    const name = normalizeTextField(record.name);
+    if (!name) {
+      continue;
+    }
+    const key = name.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push({
+      name,
+      coreFeatures: normalizeStringArray(record.core_features ?? record.coreFeatures)
+    });
+  }
+  return result;
+}
+
+function ensureTargetProductsCoverKeywords(
+  profile: ProductProfile,
+  targetKeywords: string[]
+): ProductProfile {
+  const nextTargets = [...normalizeTargetProducts(profile.targetProducts)];
+  const existingNames = nextTargets.map((target) => normalizeComparableText(target.name));
+
+  for (const keyword of normalizeStringArray(targetKeywords)) {
+    const normalizedKeyword = normalizeComparableText(keyword);
+    if (!normalizedKeyword) {
+      continue;
+    }
+    const alreadyCovered = existingNames.some(
+      (name) =>
+        name === normalizedKeyword ||
+        name.includes(normalizedKeyword) ||
+        normalizedKeyword.includes(name)
+    );
+    if (!alreadyCovered) {
+      nextTargets.push({ name: keyword, coreFeatures: [] });
+      existingNames.push(normalizedKeyword);
+    }
+  }
+
+  return {
+    ...profile,
+    productName: profile.productName || summarizeTargetProducts(nextTargets),
+    targetProducts: nextTargets
+  };
+}
+
+function summarizeTargetProducts(targetProducts: ProductTarget[]): string {
+  const names = normalizeTargetProducts(targetProducts).map((target) => target.name);
+  if (names.length === 0) {
+    return '';
+  }
+  if (names.length <= 3) {
+    return names.join(' / ');
+  }
+  return `${names.slice(0, 3).join(' / ')} +${names.length - 3}`;
+}
+
+function normalizeComparableText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[“”"']/g, '')
+    .replace(/([a-z])(\d)/gi, '$1 $2')
+    .replace(/(\d)([a-z])/gi, '$1 $2')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 
 function parseRerankResults(
   raw: unknown,

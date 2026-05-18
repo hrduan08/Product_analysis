@@ -32,7 +32,15 @@ const patchSchema = z
         brand: z.string().optional(),
         productName: z.string().optional(),
         category: z.string().optional(),
-        coreFeatures: z.array(z.string()).optional()
+        coreFeatures: z.array(z.string()).optional(),
+        targetProducts: z
+          .array(
+            z.object({
+              name: z.string(),
+              coreFeatures: z.array(z.string()).optional()
+            })
+          )
+          .optional()
       })
       .optional(),
     notifyEmail: z.string().optional(),
@@ -118,6 +126,10 @@ function serializeConfig(config: {
     productName: string;
     category: string;
     coreFeatures: string[];
+    targetProducts: Array<{
+      name: string;
+      coreFeatures: string[];
+    }>;
   };
   notifyChannels: string[];
   feishuWebhook: string;
@@ -157,7 +169,8 @@ function serializeConfig(config: {
       brand: config.productProfile.brand,
       productName: config.productProfile.productName,
       category: config.productProfile.category,
-      coreFeatures: config.productProfile.coreFeatures
+      coreFeatures: config.productProfile.coreFeatures,
+      targetProducts: config.productProfile.targetProducts
     },
     notifyChannels: config.notifyChannels,
     feishuWebhook: config.feishuWebhook,

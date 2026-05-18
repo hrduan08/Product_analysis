@@ -130,7 +130,9 @@ export async function upsertUserFeedbackItems(
         feedback_item_id: entry.feedbackItemId,
         matched_keywords: matchedKeywords,
         first_seen_at: entry.seenAt,
-        last_seen_at: entry.seenAt
+        last_seen_at: entry.seenAt,
+        lifecycle_status: 'candidate',
+        status_updated_at: entry.seenAt
       },
       update: {
         matched_keywords: matchedKeywords,
@@ -154,6 +156,8 @@ export async function upsertUserFeedbackItems(
 export type UserFeedbackWithItem = {
   feedback_item_id: string;
   matched_keywords: string[];
+  lifecycle_status: string;
+  status_updated_at: Date;
   last_notified_at: Date | null;
   profile_filter_status: string | null;
   profile_filter_score: number | null;
@@ -199,6 +203,8 @@ export async function getUserFeedbackItemsByIds(
   return records.map((record) => ({
     feedback_item_id: record.feedback_item_id,
     matched_keywords: record.matched_keywords,
+    lifecycle_status: record.lifecycle_status,
+    status_updated_at: record.status_updated_at,
     last_notified_at: record.last_notified_at ?? null,
     profile_filter_status: record.profile_filter_status ?? null,
     profile_filter_score: record.profile_filter_score ?? null,
@@ -273,6 +279,8 @@ export async function listUserUnnotifiedFeedback(params: {
   return records.map((record) => ({
     feedback_item_id: record.feedback_item_id,
     matched_keywords: record.matched_keywords,
+    lifecycle_status: record.lifecycle_status,
+    status_updated_at: record.status_updated_at,
     last_notified_at: record.last_notified_at ?? null,
     profile_filter_status: record.profile_filter_status ?? null,
     profile_filter_score: record.profile_filter_score ?? null,
@@ -303,6 +311,8 @@ export async function updateUserFeedbackFilterResults(
         }
       },
       data: {
+        lifecycle_status: mapLifecycleStatus(item.status),
+        status_updated_at: item.filteredAt ?? new Date(),
         profile_filter_status: item.status,
         profile_filter_score: item.score ?? null,
         profile_filter_reason: item.reason ?? null,
@@ -320,9 +330,26 @@ export async function markUserFeedbackItemsNotified(userId: string, feedbackItem
       feedback_item_id: { in: feedbackItemIds }
     },
     data: {
-      last_notified_at: new Date()
+      last_notified_at: new Date(),
+      lifecycle_status: 'notified',
+      status_updated_at: new Date()
     }
   });
+}
+
+function mapLifecycleStatus(filterStatus: string): string {
+  switch (filterStatus) {
+    case 'rejected_pre_filter':
+    case 'rejected_reranker':
+      return 'filtered_out';
+    case 'passed_exact_match':
+    case 'passed_no_profile':
+    case 'passed_reranker':
+    case 'passed_reranker_fallback':
+      return 'deliverable';
+    default:
+      return 'candidate';
+  }
 }
 
 function parseDate(value?: string | null): Date | null {

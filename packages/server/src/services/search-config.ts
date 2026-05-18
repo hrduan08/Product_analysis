@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { prisma } from '../db/prisma.js';
 import { createHttpError } from '../utils/http-error.js';
-import type { Prisma } from '../generated/prisma/client.js';
+import { Prisma } from '../generated/prisma/client.js';
 import {
   filterEnabledProviderPlatforms,
   getSelectableSearchPlatforms,
@@ -13,6 +13,11 @@ import type { Platform } from '../types/search.js';
 import { getTierLimitsByStatus } from '../config/search-limits.js';
 import { buildFeishuTextPayload, sendFeishuWebhookMessage } from './feishu.js';
 import { generateAndPersistProductProfile } from './product-profile.js';
+
+type ProductTargetDto = {
+  name: string;
+  coreFeatures: string[];
+};
 
 const DEFAULT_PLATFORMS: string[] = ['youtube'];
 const SUPPORTED_SELECTION_PLATFORMS = ['youtube', 'reddit', 'x', 'facebook'] as const;
@@ -86,7 +91,16 @@ const patchSchema = z
         brand: z.string().trim().max(120).optional(),
         productName: z.string().trim().max(200).optional(),
         category: z.string().trim().max(120).optional(),
-        coreFeatures: z.array(z.string().trim().min(1).max(120)).max(20).optional()
+        coreFeatures: z.array(z.string().trim().min(1).max(120)).max(20).optional(),
+        targetProducts: z
+          .array(
+            z.object({
+              name: z.string().trim().min(1).max(200),
+              coreFeatures: z.array(z.string().trim().min(1).max(120)).max(20).optional()
+            })
+          )
+          .max(20)
+          .optional()
       })
       .optional()
   })
@@ -114,6 +128,7 @@ export type UserSearchConfigRecord = {
       productName: string;
       category: string;
       coreFeatures: string[];
+      targetProducts: ProductTargetDto[];
     };
   notifyChannels: string[];
   feishuWebhook: string;
@@ -230,7 +245,8 @@ export async function getUserSearchConfig(userId: string): Promise<UserSearchCon
         brand: '',
         productName: '',
         category: '',
-        coreFeatures: []
+        coreFeatures: [],
+        targetProducts: []
       },
       notifyChannels: ['feishu'],
       feishuWebhook: '',
@@ -404,6 +420,12 @@ export async function updateUserSearchConfig(
       product_profile_category: manualProfile?.category ?? existing?.product_profile_category ?? null,
       product_profile_core_features:
         manualProfile?.coreFeatures ?? existing?.product_profile_core_features ?? [],
+      product_profile_targets:
+        manualProfile?.targetProducts && manualProfile.targetProducts.length > 0
+          ? manualProfile.targetProducts
+          : manualProfile
+            ? Prisma.JsonNull
+            : normalizeProductProfileTargets(existing?.product_profile_targets),
       product_profile_competitors: [],
       product_profile_status:
         manualProfile
@@ -440,6 +462,10 @@ export async function updateUserSearchConfig(
       product_profile_product_name: manualProfile?.productName ?? null,
       product_profile_category: manualProfile?.category ?? null,
       product_profile_core_features: manualProfile?.coreFeatures ?? [],
+      product_profile_targets:
+        manualProfile?.targetProducts && manualProfile.targetProducts.length > 0
+          ? manualProfile.targetProducts
+          : Prisma.JsonNull,
       product_profile_competitors: [],
       product_profile_status: manualProfile ? 'ready' : hasAnyProductSource(productWebsiteUrl, productCommerceUrl, productDescription) ? 'pending' : 'idle',
       product_profile_error: null,
@@ -498,6 +524,7 @@ type DueSearchConfig = Prisma.UserSearchConfigGetPayload<{
     product_profile_product_name: true;
     product_profile_category: true;
     product_profile_core_features: true;
+    product_profile_targets: true;
     product_profile_competitors: true;
     user: {
       select: {
@@ -554,6 +581,7 @@ export async function listDueUserSearchConfigs(
       product_profile_product_name: true,
       product_profile_category: true,
       product_profile_core_features: true,
+      product_profile_targets: true,
       product_profile_competitors: true,
       user: {
         select: {
@@ -728,6 +756,7 @@ function mapRecordToDto(
     product_profile_product_name: string | null;
     product_profile_category: string | null;
     product_profile_core_features: string[];
+    product_profile_targets: Prisma.JsonValue | null;
     product_profile_competitors: string[];
     notify_channels: string[];
     feishu_webhook: string | null;
@@ -781,7 +810,8 @@ function mapRecordToDto(
       brand: record.product_profile_brand ?? '',
       productName: record.product_profile_product_name ?? '',
       category: record.product_profile_category ?? '',
-      coreFeatures: [...record.product_profile_core_features]
+      coreFeatures: [...record.product_profile_core_features],
+      targetProducts: normalizeProductProfileTargets(record.product_profile_targets)
     },
     notifyChannels:
       record.notify_channels && record.notify_channels.length > 0
@@ -808,8 +838,69 @@ function normalizeProductProfileInput(input: NonNullable<SearchConfigPatchInput[
     brand: input.brand?.trim() ?? '',
     productName: input.productName?.trim() ?? '',
     category: input.category?.trim() ?? '',
-    coreFeatures: dedupeTextArray(input.coreFeatures ?? [])
+    coreFeatures: dedupeTextArray(input.coreFeatures ?? []),
+    targetProducts: normalizeIncomingTargetProducts(input.targetProducts ?? [])
   };
+}
+
+function normalizeIncomingTargetProducts(values: Array<{ name: string; coreFeatures?: string[] }>): ProductTargetDto[] {
+  const seen = new Set<string>();
+  const result: ProductTargetDto[] = [];
+
+  for (const value of values) {
+    const name = value.name.trim();
+    if (!name) {
+      continue;
+    }
+    const key = name.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push({
+      name,
+      coreFeatures: dedupeTextArray(value.coreFeatures ?? [])
+    });
+  }
+
+  return result;
+}
+
+function normalizeProductProfileTargets(value: Prisma.JsonValue | null | undefined): ProductTargetDto[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const result: ProductTargetDto[] = [];
+
+  for (const item of value) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      continue;
+    }
+    const rawName = 'name' in item && typeof item.name === 'string' ? item.name : '';
+    const name = rawName.trim();
+    if (!name) {
+      continue;
+    }
+    const key = name.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    const rawCoreFeatures =
+      'coreFeatures' in item && Array.isArray(item.coreFeatures)
+        ? item.coreFeatures
+        : 'core_features' in item && Array.isArray(item.core_features)
+          ? item.core_features
+          : [];
+    result.push({
+      name,
+      coreFeatures: dedupeTextArray(rawCoreFeatures.map((feature) => String(feature)))
+    });
+  }
+
+  return result;
 }
 
 function dedupeTextArray(values: string[]): string[] {
@@ -835,13 +926,15 @@ function hasUsableProductProfile(record: {
   product_profile_product_name?: string | null;
   product_profile_category?: string | null;
   product_profile_core_features?: string[];
+  product_profile_targets?: Prisma.JsonValue | null;
   product_profile_competitors?: string[];
 }): boolean {
   return Boolean(
     record.product_profile_brand ||
       record.product_profile_product_name ||
       record.product_profile_category ||
-      (record.product_profile_core_features?.length ?? 0) > 0
+      (record.product_profile_core_features?.length ?? 0) > 0 ||
+      normalizeProductProfileTargets(record.product_profile_targets).length > 0
   );
 }
 
